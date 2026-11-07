@@ -204,8 +204,9 @@ def _mvn_below(upper, mean, cov):
     upper, mean = np.asarray(upper, float), np.asarray(mean, float)
     if len(upper) == 1:
         return float(ndtr((upper[0] - mean[0]) / np.sqrt(cov[0, 0])))
-    mvn = multivariate_normal(mean, cov, abseps=1e-10, releps=1e-10, maxpts=2_000_000)
-    return float(mvn.cdf(upper))
+    # Genz integration is randomized: a fixed rng makes the oracle deterministic.
+    return float(multivariate_normal.cdf(upper, mean, cov, maxpts=2_000_000, abseps=1e-10,
+                                         releps=1e-10, rng=np.random.default_rng(12345)))
 
 
 def bs_autocall_probabilities(S0, r, q, sigma, obs_times, B):
