@@ -3,7 +3,7 @@
 Pricing and risk for an autocallable structured product under the Heston stochastic-volatility
 model, in pure NumPy/SciPy (vectorized; no C++, no Numba).
 
-> Status: stage 1 of 7 (semi-analytic European pricer). Later sections are added as the
+> Status: stage 2 of 7 (semi-analytic European pricer, Monte Carlo). Later sections are added as the
 > stages land.
 
 ## Model
@@ -28,6 +28,29 @@ from hestonlib import REFERENCE
 from hestonlib.analytic import heston_call, heston_put
 heston_call([90, 100, 110], 1.0, REFERENCE)
 ```
+
+## Monte Carlo (`hestonlib.mc`)
+
+* **Full-truncation Euler** on ln S (Lord, Koekkoek and van Dijk, 2010): v+ = max(v, 0) enters
+  the drift and diffusion of both processes, and the raw v is carried forward. On the log
+  scale, the discounted forward is an exact martingale of the discrete scheme.
+* **Antithetic variates** flip both independent drivers together. The standard error is
+  computed from the n/2 pair means, which are independent.
+* **Coupled levels and common random numbers**: normals are drawn on a fine grid
+  (`rng_steps`) and summed per step, so runs with different step counts share one Brownian
+  path, and runs with different parameters share the same normals.
+* Every estimate is an `MCResult(price, se, n_samples)`.
+
+```python
+from hestonlib import REFERENCE
+from hestonlib.mc import mc_european
+mc_european([90, 100, 110], 1.0, REFERENCE, n_steps=64, n_paths=200_000, seed=1)
+```
+
+The Euler bias is tested in two ways. On coupled levels with Feller strongly violated, the
+price falls by a statistically significant amount at every halving of dt. At the reference
+parameters, the 64-step price matches the COS oracle within 4 SE plus a bias allowance
+|MC(32) - MC(64)| + 4 SE (the weak-order-1 estimate of the remaining bias).
 
 ## How correctness is established
 
