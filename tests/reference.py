@@ -12,6 +12,8 @@ Contents
   the Riccati ODEs with ``scipy.integrate.solve_ivp``. It is used to validate the closed form
   independently of any algebra.
 * ``cos_put`` / ``cos_call`` / ``cos_digital_put``: Fang & Oosterlee (2008) COS method.
+* ``bs_autocallable`` / ``bs_autocall_probabilities``: exact discrete-monitoring autocallable
+  price under Black-Scholes from multivariate normal CDFs (derivation at the function).
 
 COS method summary (Fang & Oosterlee, SIAM J. Sci. Comput. 31(2), 2008)
 ----------------------------------------------------------------------
@@ -183,3 +185,48 @@ def cos_digital_put(S0, K, T, r, q, v0, kappa, theta, xi, rho, N=1024, L=12.0, a
     if not adaptive:
         return _raw_digital_put(S0, K, T, r, q, model, N, L)
     return _cos_converged(_raw_digital_put, S0, K, T, r, q, model, N, L)
+
+
+# --------------------------------------------------------------------------- BS autocallable
+# Exact price of a discretely observed autocallable under Black-Scholes, from multivariate
+# normal CDFs. X_i = ln(S_{t_i}/S0) = mu t_i + sigma W_{t_i}, mu = r - q - sigma^2/2, so
+# X ~ N(mu t, sigma^2 min(t_i, t_j)). With b = ln B, k = ln min(KI, B) and
+# F_i = P(X_1 < b, ..., X_i < b) (F_0 = 1):
+#   P(called at t_i)                        = F_{i-1} - F_i
+#   P(never called, S_T >= KI S0)           = F_n - G,     G = P(X_1..X_{n-1} < b, X_n < k)
+#   E[S_T/S0 ; never called, S_T < KI S0]   = e^{(r-q)T} G*
+# where G* is G with drift mu + sigma^2 (Girsanov: E[e^{X_n} 1_A] = E[e^{X_n}] Q*(A), and
+# under Q* the Brownian motion has drift sigma). The price is
+#   sum_i N (1 + c i) e^{-r t_i} (F_{i-1} - F_i) + N e^{-rT} (F_n - G) + N e^{-qT} G*.
+def _mvn_below(upper, mean, cov):
+    from scipy.stats import multivariate_normal
+
+    upper, mean = np.asarray(upper, float), np.asarray(mean, float)
+    if len(upper) == 1:
+        return float(ndtr((upper[0] - mean[0]) / np.sqrt(cov[0, 0])))
+    mvn = multivariate_normal(mean, cov, abseps=1e-10, releps=1e-10, maxpts=2_000_000)
+    return float(mvn.cdf(upper))
+
+
+def bs_autocall_probabilities(S0, r, q, sigma, obs_times, B):
+    """P(first autocall at t_i), i = 1..n, under Black-Scholes."""
+    t = np.asarray(obs_times, float)
+    mu, b = r - q - 0.5 * sigma**2, np.log(B)
+    cov = sigma**2 * np.minimum.outer(t, t)
+    F = [1.0] + [_mvn_below(np.full(i, b), mu * t[:i], cov[:i, :i]) for i in range(1, len(t) + 1)]
+    return np.array([F[i] - F[i + 1] for i in range(len(t))])
+
+
+def bs_autocallable(S0, r, q, sigma, obs_times, B, KI, c, N=100.0):
+    """Exact BS price of the autocallable (barriers as fractions of S0, coupon c per date)."""
+    t = np.asarray(obs_times, float)
+    n = len(t)
+    mu, b, k = r - q - 0.5 * sigma**2, np.log(B), np.log(min(KI, B))
+    cov = sigma**2 * np.minimum.outer(t, t)
+    F = [1.0] + [_mvn_below(np.full(i, b), mu * t[:i], cov[:i, :i]) for i in range(1, n + 1)]
+    up = np.full(n, b)
+    up[-1] = k
+    G = _mvn_below(up, mu * t, cov)
+    G_star = _mvn_below(up, (mu + sigma**2) * t, cov)
+    price = sum(N * (1 + c * (i + 1)) * np.exp(-r * t[i]) * (F[i] - F[i + 1]) for i in range(n))
+    return price + N * np.exp(-r * t[-1]) * (F[n] - G) + N * np.exp(-q * t[-1]) * G_star
