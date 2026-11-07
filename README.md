@@ -3,9 +3,8 @@
 Pricing and risk for an autocallable structured product under the Heston stochastic-volatility
 model, in pure NumPy/SciPy (vectorized; no C++, no Numba).
 
-> Status: stage 6 of 7 (semi-analytic European pricer, Monte Carlo, autocallable,
-> implied vols and calibration, Greeks, convergence study). Later sections are added as the
-> stages land.
+> Status: all 7 stages complete (semi-analytic European pricer, Monte Carlo, autocallable,
+> implied vols and calibration, Greeks, convergence study, dashboard).
 
 ## Model
 
@@ -244,6 +243,25 @@ antithetic SE is computed from pair means.
 
 Check every number in the marked README blocks against fresh script output with
 `.venv/bin/python scripts/check_readme.py`.
+
+## Dashboard (`app/dashboard.py`)
+
+    .venv/bin/streamlit run app/dashboard.py
+
+The sidebar sets the Heston parameters, the spot and the note's fixing, the product
+(maturity, observation frequency, barrier, knock-in, coupon) and the MC settings (steps per
+year, paths, seed). The page has three tabs:
+
+* **Price:** the price with its SE and 95% interval, P(never called), P(loss), the expected
+  life, and the per-date call probabilities, each with its SE.
+* **Greeks:** delta, gamma, vega and rho on demand, using the CRN bumps described above,
+  each with its SE.
+* **Smile:** Black-Scholes implied vols of the semi-analytic Heston prices. Quotes whose
+  time value is within the pricer's error estimate are left blank.
+
+The Feller ratio is shown alongside. The computations are plain functions, tested against
+the exact BS oracle. The whole app is run headless in the test suite through Streamlit's
+`AppTest`.
 
 ## How correctness is established
 
