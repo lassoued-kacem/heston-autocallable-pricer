@@ -163,3 +163,15 @@ def test_bs_orthant_probability_exact():
     exact = 1 / 8 + (np.arcsin(rho[0, 1]) + np.arcsin(rho[0, 2]) + np.arcsin(rho[1, 2])) / (4 * np.pi)
     assert abs((1 - probs.sum()) - exact) < 1e-8
     assert probs[0] == pytest.approx(0.5, abs=1e-14)  # P(X_1 >= 0) = 1/2 with zero drift
+
+
+def test_bs_autocallable_ki_above_barrier_one_date():
+    """KI > B: every uncalled path is below KI, so for one date the payoff is N (1 + c) if
+    S_T >= B S0 and N S_T / S0 otherwise: N (1+c) e^{-rT} N(d2(B)) + N e^{-qT} N(-d1(B)).
+    This exercises the min(KI, B) branch. Tolerance 1e-12."""
+    S0, r, q, s, _, _, c = AC.values()
+    T, B, KI, N = 2.0, 0.9, 1.1, 100.0
+    d1 = (np.log(1 / B) + (r - q + 0.5 * s * s) * T) / (s * np.sqrt(T))
+    d2 = d1 - s * np.sqrt(T)
+    expect = N * (1 + c) * np.exp(-r * T) * norm.cdf(d2) + N * np.exp(-q * T) * norm.cdf(-d1)
+    assert abs(R.bs_autocallable(S0, r, q, s, [T], B, KI, c, N) - expect) < 1e-12

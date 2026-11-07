@@ -92,6 +92,7 @@ def _single_date_truth(d, T, B, KI, c, N=100.0):
     (S0 - S) 1{S < K} = (K - S)^+ + (S0 - K) 1{S < K} for K = KI S0. Hence
     V = N e^{-rT} + N c (e^{-rT} - DP(B S0)) - (N/S0) [P(KI S0) + (S0 - KI S0) DP(KI S0)]
     where P is the put and DP the cash-or-nothing digital put, both from the COS oracle."""
+    assert KI <= B, "the replication double counts the digital when KI > B"
     S0, r = d["S0"], d["r"]
     a = model_args(d)
     dp_b = R.cos_digital_put(S0, B * S0, T, *a)[0]
@@ -109,7 +110,9 @@ def test_single_date_matches_cos_decomposition():
     order >= 1), and an order-1/2 extrapolation from n = 8,
     sqrt(8/64) (|MC(8) - truth| + 4 SE(MC(8))). Tolerance 4 SE(MC(64)) + allowance.
     Power: the tolerance must be below half the price change from flipping the sign of rho
-    (computed from COS), so a sign error cannot pass."""
+    (computed from COS), so a sign error cannot pass.
+    For this payoff the Euler bias is below the noise even at n = 8, so the allowance is in
+    effect statistical; bias shrinkage is shown by test_multi_date_heston_bias_shrinks."""
     T, B, KI, c = 1.0, 1.05, 0.7, 0.10
     truth = _single_date_truth(REF, T, B, KI, c)
     flipped = _single_date_truth(dict(REF, rho=-REF["rho"]), T, B, KI, c)
@@ -135,7 +138,7 @@ def test_bs_limit_matches_mvn_oracle(q):
     """xi = 1e-8, v0 = theta: v stays at theta to O(xi) and log-Euler is exact for GBM at
     the observation dates, so the MC is unbiased for the discrete-monitoring BS price.
     Four annual dates, 95% barrier, KI 65%, 7% coupon. Tolerance 4 SE (the oracle's
-    own error is about 1e-7, from Genz integration). Call probabilities are checked too,
+    own error is about 1e-6 for four dates, from Genz integration, against 4 SE ~ 0.06). Call probabilities are checked too,
     each within 4 of its own SE."""
     d = dict(REF, xi=1e-8, q=q)
     p = HestonParams(**d)
