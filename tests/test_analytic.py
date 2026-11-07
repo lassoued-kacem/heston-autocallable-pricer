@@ -111,8 +111,9 @@ def test_no_arbitrage_bounds_and_shape(ref_params):
     K = np.linspace(50, 200, 61)
     T = 1.0
     C = heston_call(K, T, ref_params)
-    lower = np.maximum(100.0 - K * np.exp(-0.03 * T), 0.0)
-    assert np.all(C >= lower - 1e-12) and np.all(C <= 100.0 + 1e-12)
+    disc_S = REF["S0"] * np.exp(-REF["q"] * T)
+    lower = np.maximum(disc_S - K * np.exp(-REF["r"] * T), 0.0)
+    assert np.all(C >= lower - 1e-12) and np.all(C <= disc_S + 1e-12)
     assert np.all(np.diff(C) < 0)
     assert np.all(np.diff(C, 2) > -1e-12)
 
