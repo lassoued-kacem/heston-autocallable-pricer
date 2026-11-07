@@ -193,15 +193,19 @@ def test_call_prices_match_cos_within_se_and_bias():
     * Richardson, under weak order alpha >= 1: E[D] = bias(32) - bias(64)
       = bias(64) (2^alpha - 1) >= bias(64), with D = MC(32) - MC(64); allowance |D| + 4 SE(D).
     * A conservative order-1/2 extrapolation from n = 8, where the REF bias is resolved:
-      |bias(64)| <= sqrt(8/64) (|MC(8) - COS| + 4 SE(MC(8))). Order 1/2 is half the rate
-      seen on the stress set, so this covers a much slower convergence than observed.
-    All levels share one Brownian path (rng_steps = 64)."""
+      |bias(64)| <= sqrt(8/64) (|MC(8) - COS| + 4 SE(MC(8))). This assumes |bias| falls at
+      order >= 1/2 from n = 8 on, below the roughly order-1 rate seen on the stress set.
+    All levels share one Brownian path (rng_steps = 64).
+
+    Power: the tolerance must stay below half the COS price change from flipping the sign
+    of rho, at every strike, so a sign error cannot pass. That change is smallest at the
+    money (about 0.12), which is what sets n_paths = 1.6M."""
     p = HestonParams(**REF)
     K = np.array([80.0, 90.0, 100.0, 110.0, 120.0])
     cos = R.cos_call(REF["S0"], K, 1.0, *model_args(REF))
     pay = {}
     for n in (8, 32, 64):
-        P = simulate(p, 1.0, n, 200_000, seed=31, rng_steps=64)
+        P = simulate(p, 1.0, n, 1_600_000, seed=31, rng_steps=64)
         pay[n] = np.exp(-p.r) * np.maximum(P.S[:, -1:] - K[None, :], 0.0)
     fine = mc_estimate(pay[64], True)
     D = mc_estimate(pay[32] - pay[64], True)
@@ -210,5 +214,5 @@ def test_call_prices_match_cos_within_se_and_bias():
     half_order = np.sqrt(8 / 64) * (np.abs(coarse.price - cos) + 4 * coarse.se)
     tol = 4 * fine.se + np.maximum(richardson, half_order)
     assert np.all(np.abs(fine.price - cos) < tol), (fine.price - cos, tol)
-    # The tolerance must stay meaningful: well below the prices themselves.
-    assert np.all(tol < 0.1)
+    flipped = R.cos_call(REF["S0"], K, 1.0, *model_args(dict(REF, rho=-REF["rho"])))
+    assert np.all(tol < 0.5 * np.abs(flipped - cos)), (tol, flipped - cos)
