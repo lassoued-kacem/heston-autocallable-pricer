@@ -17,7 +17,7 @@ Greeks and bumps (central differences, O(h^2) truncation error):
 * rho = dV/dr, bump h_rate.
 
 Bump sizes and discontinuities: the payoff jumps at every autocall date, where the call
-amount N(1 + c i) exceeds the value of continuing (at maturity the jump is N(1 + c n) - N),
+amount N(1 + c i) differs from the value of continuing (at maturity the jump is N(1 + c n) - N),
 and at the KI level at maturity, where it drops from N to N KI (a jump of N(1 - KI), the
 largest one for the reference note). For a jump of size J, the per-path delta difference is
 J/(2h) on a set of probability O(h), so Var(delta estimate) = O(1/h) and

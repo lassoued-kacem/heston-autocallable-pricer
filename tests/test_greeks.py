@@ -74,7 +74,7 @@ def test_bs_limit_greeks_match_oracle_fd():
     exact price is c h^2, so FD(h) - FD(h/2) = (3/4) c h^2 and the bias at h is
     (4/3) |FD(h) - FD(h/2)|. It must be below a quarter of this run's SE for each Greek, so
     the default bumps barely distort the Greek. The oracle's Genz error (seeded, abseps
-    1e-10) is below 1e-8 in price, at most 1e-8 / h^2 = 2.5e-9 in gamma, which is negligible."""
+    1e-10) is below 1e-8 in price, at most 4e-8 / h^2 = 1e-8 in gamma, which is negligible."""
     p = HestonParams(**dict(REF, xi=1e-8))
     g = autocallable_greeks(PRODUCT, p, 3, 400_000, seed=5)
     ora = _oracle_fd()
