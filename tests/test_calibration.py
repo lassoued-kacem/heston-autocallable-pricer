@@ -7,6 +7,7 @@ truth is the parameter set itself, not the package's output.
 import numpy as np
 import pytest
 from scipy.stats import chi2
+from scipy.stats import f as f_dist
 
 import reference as R
 from conftest import REF, STRESS, model_args
@@ -70,8 +71,9 @@ def test_noise_free_recovery(d):
 
 def test_noisy_recovery_is_consistent_with_reported_se():
     """IV noise iid N(0, 0.002^2) on the REF surface (28 quotes), one seed. Each parameter error must be
-    within 4 of its reported SE (sqrt of the diagonal of s^2 (J^T J)^{-1}); the probability
-    of a false failure is about 5 * 6e-5 if the linearized covariance is right. The residual
+    within 4 of its reported SE (sqrt of the diagonal of s^2 (J^T J)^{-1}). Since s^2 is
+    estimated with 23 dof, each z is t_23: P(|t_23| > 4) = 5.6e-4, so the false-failure
+    probability over five parameters is at most 2.8e-3 if the linearized model holds. The residual
     scale s (from exact IV errors) must match the noise: s^2 / 0.002^2 lies within the
     chi2_{23}/23 0.05% and 99.95% quantiles."""
     noise = 0.002
@@ -80,11 +82,14 @@ def test_noisy_recovery_is_consistent_with_reported_se():
     z = delta / res.se
     assert np.all(np.abs(z) < 4), z
     # The reported covariance diag(se) corr diag(se) must be right in size, not only not too
-    # small: the Mahalanobis distance delta' Cov^{-1} delta is chi2_5 under the linear model.
-    # Its 0.05% quantile (0.16) catches an overstated SE (for example a missing s^2 factor).
+    # small. Under the linear model delta' (J^T J) delta / sigma^2 is chi2_5, independent of
+    # s^2 / sigma^2 ~ chi2_23 / 23, so the Mahalanobis distance with the estimated s^2 is
+    # 5 F(5, 23). Its 0.05% and 99.95% quantiles are 0.149 and 34.0; the lower one catches an
+    # overstated SE (for example a missing s^2 factor).
     cov = np.outer(res.se, res.se) * res.corr
     maha = float(delta @ np.linalg.solve(cov, delta))
-    assert chi2.ppf(0.0005, 5) < maha < chi2.ppf(0.9995, 5), maha
+    lo_m, hi_m = 5 * f_dist.ppf([0.0005, 0.9995], 5, m_dof := res.iv_errors.size - 5)
+    assert lo_m < maha < hi_m, maha
     m = res.iv_errors.size
     s2 = np.sum(res.iv_errors**2) / (m - 5)
     lo, hi = chi2.ppf([0.0005, 0.9995], m - 5) / (m - 5)
