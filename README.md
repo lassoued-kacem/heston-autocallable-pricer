@@ -82,7 +82,7 @@ At 192 steps:
 * P(called at year 1, 2, 3) = 0.5799, 0.1200, 0.0561.
 * P(never called) = 0.2439.
 * P(loss) = 0.0629.
-* Expected life = 1.7201 years.
+* Expected life = 1.7201 +- 0.0006 years.
 
 The probability SEs are 0.0002 to 0.0004.
 
