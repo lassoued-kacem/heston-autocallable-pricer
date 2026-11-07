@@ -169,20 +169,29 @@ def test_euler_bias_shrinks_with_step_size():
 
 
 def test_call_prices_match_cos_within_se_and_bias():
-    """REF parameters, T = 1, n = 64 steps. Under weak order 1, bias(n) = c/n, so the paired
-    difference D = MC(32) - MC(64) estimates bias(64) (c/32 - c/64 = c/64). The bias
-    allowance is |D| + 4 SE(D), and the tolerance is 4 SE(MC(64)) + that allowance.
-    Order 1 (or faster) is supported by test_euler_bias_shrinks_with_step_size."""
+    """REF parameters, T = 1, n = 64 steps; tolerance 4 SE(MC(64)) + a bias allowance.
+
+    At REF the bias at n >= 32 is below the MC noise, so its rate cannot be measured there.
+    The allowance is therefore the larger of two estimates of bias(64):
+    * Richardson, under weak order alpha >= 1: E[D] = bias(32) - bias(64)
+      = bias(64) (2^alpha - 1) >= bias(64), with D = MC(32) - MC(64); allowance |D| + 4 SE(D).
+    * A conservative order-1/2 extrapolation from n = 8, where the REF bias is resolved:
+      |bias(64)| <= sqrt(8/64) (|MC(8) - COS| + 4 SE(MC(8))). Order 1/2 is half the rate
+      seen on the stress set, so this covers a much slower convergence than observed.
+    All levels share one Brownian path (rng_steps = 64)."""
     p = HestonParams(**REF)
     K = np.array([80.0, 90.0, 100.0, 110.0, 120.0])
     cos = R.cos_call(REF["S0"], K, 1.0, *model_args(REF))
     pay = {}
-    for n in (32, 64):
+    for n in (8, 32, 64):
         P = simulate(p, 1.0, n, 200_000, seed=31, rng_steps=64)
         pay[n] = np.exp(-p.r) * np.maximum(P.S[:, -1:] - K[None, :], 0.0)
     fine = mc_estimate(pay[64], True)
     D = mc_estimate(pay[32] - pay[64], True)
-    tol = 4 * fine.se + np.abs(D.price) + 4 * D.se
+    coarse = mc_estimate(pay[8], True)
+    richardson = np.abs(D.price) + 4 * D.se
+    half_order = np.sqrt(8 / 64) * (np.abs(coarse.price - cos) + 4 * coarse.se)
+    tol = 4 * fine.se + np.maximum(richardson, half_order)
     assert np.all(np.abs(fine.price - cos) < tol), (fine.price - cos, tol)
     # The tolerance must stay meaningful: well below the prices themselves.
     assert np.all(tol < 0.1)
