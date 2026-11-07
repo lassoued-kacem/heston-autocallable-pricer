@@ -4,8 +4,7 @@ Pricing and risk for an autocallable structured product under the Heston stochas
 model, in pure NumPy/SciPy (vectorized; no C++, no Numba).
 
 > Status: all 7 stages complete (semi-analytic European pricer, Monte Carlo, autocallable,
-> implied vols and calibration, Greeks, convergence study, dashboard). Later sections are added as the
-> stages land.
+> implied vols and calibration, Greeks, convergence study, dashboard).
 
 ## Model
 
