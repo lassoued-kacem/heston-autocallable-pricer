@@ -24,3 +24,9 @@ def test_blocks_are_parsed_with_their_script():
     text = "x\n<!-- numbers-from: scripts/a.py -->\n| 1.25 |\n<!-- end-numbers -->\ny 9.99"
     (script, body), = CR.BLOCK.findall(text)
     assert script == "scripts/a.py" and CR.numbers(body) == {"1.25"}
+
+
+def test_block_may_name_several_scripts():
+    text = "<!-- numbers-from: scripts/a.py scripts/b.py -->\n0.5\n<!-- end-numbers -->"
+    (scripts, _), = CR.BLOCK.findall(text)
+    assert scripts.split() == ["scripts/a.py", "scripts/b.py"]

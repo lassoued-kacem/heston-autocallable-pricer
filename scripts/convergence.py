@@ -103,7 +103,7 @@ def _ticks(ax, values, fmt):
     ax.set_xticklabels([fmt(v) for v in values])
 
 
-def plot_bias(stress_rows):
+def plot_bias(stress_rows, out_dir):
     fig, ax = plt.subplots(figsize=(6.4, 4.2), facecolor=SURFACE)
     _style(ax)
     n, err, se = stress_rows.T
@@ -119,10 +119,10 @@ def plot_bias(stress_rows):
     ax.set_title("Euler bias, ATM call, Feller ratio 0.09", color=INK, fontsize=11, loc="left")
     ax.legend(frameon=False, fontsize=9, labelcolor=INK)
     fig.tight_layout()
-    fig.savefig(ROOT / "docs/figures/bias_vs_steps.png", dpi=150, facecolor=SURFACE)
+    fig.savefig(out_dir / "bias_vs_steps.png", dpi=150, facecolor=SURFACE)
 
 
-def plot_se(se_rows):
+def plot_se(se_rows, out_dir):
     fig, ax = plt.subplots(figsize=(6.4, 4.2), facecolor=SURFACE)
     _style(ax)
     n, anti, plain = se_rows.T
@@ -137,17 +137,23 @@ def plot_se(se_rows):
     ax.set_title("MC standard error, ATM call, reference set", color=INK, fontsize=11, loc="left")
     ax.legend(frameon=False, fontsize=9, labelcolor=INK)
     fig.tight_layout()
-    fig.savefig(ROOT / "docs/figures/se_vs_paths.png", dpi=150, facecolor=SURFACE)
+    fig.savefig(out_dir / "se_vs_paths.png", dpi=150, facecolor=SURFACE)
 
 
-def main():
+def main(argv=None):
+    import argparse
+
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--figures-dir", default=str(ROOT / "docs/figures"),
+                    help="where to write the PNGs (default: docs/figures)")
+    out_dir = Path(ap.parse_args(argv).figures_dir)
     stress = bias_table(STRESS, "stress")
     bias_table(REFERENCE, "reference")
     se = se_table()
-    (ROOT / "docs/figures").mkdir(parents=True, exist_ok=True)
-    plot_bias(stress)
-    plot_se(se)
-    print("\nwrote docs/figures/bias_vs_steps.png, docs/figures/se_vs_paths.png")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    plot_bias(stress, out_dir)
+    plot_se(se, out_dir)
+    print(f"\nwrote bias_vs_steps.png and se_vs_paths.png to {out_dir}")
 
 
 if __name__ == "__main__":
