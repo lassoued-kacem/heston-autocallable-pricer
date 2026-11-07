@@ -178,10 +178,78 @@ A mutation check was run before review. Each of these planted bugs was caught:
   5. The README expected life now carries its SE.
 - README numbers: the reviewer re-ran the script and found every number matched exactly.
 
+## Stage 4: implied volatility and calibration (merged)
+
+### What was built
+- `heston_call` and `heston_put` take `return_error=True`. This returns QUADPACK's error
+  estimate in price units, plus a rounding term for the F - sqrt(FK)/pi * I cancellation.
+- `bs_vega`.
+- `src/hestonlib/implied_vol.py`:
+  - `brentq` inside checked no-arbitrage bounds;
+  - a price within its error of a bound gives NaN;
+  - a price beyond a bound by more than its error raises;
+  - `heston_implied_vols` applies the pricer's error estimate.
+- `src/hestonlib/calibration.py`:
+  - bounded TRF least squares on (C_model - C_mkt)/vega;
+  - SEs from s^2 (J^T J)^-1 with m - 5 dof;
+  - the correlation matrix and the scaled condition number;
+  - parameters at a bound;
+  - the Feller ratio (reported, not imposed);
+  - exact model IVs, with unresolvable ones counted (`n_iv_unresolved`).
+- `scripts/calibrate.py`, whose output the README quotes.
+
+### Tests
+89 passing in total (14 in `test_implied_vol.py`, 6 in `test_calibration.py`); full suite
+about 50 s.
+
+### Tolerances and why
+| Check | Tolerance | Justification |
+|---|---|---|
+| bs_vega vs central difference of the oracle (h = 1e-5) | 1e-6 | h^2/6 max\|d3C/dsigma3\| = 1.4e-7 (max about 8.4e3 on the grid); rounding about 1e-9. |
+| IV round trip (oracle BS prices) | 64 eps S0 / vega + 1e-13, asserted only where vega > 1e-4 | Price rounding divided by vega, plus brentq xtol. The worst case uses 1.4% of it. |
+| Pricer error estimate vs COS at N = 2^17, L = 192 | \|Lewis - COS\| <= err + 1e-12, and err < 1e-8 | The COS is checked to < 1e-12 by doubling, so the estimate is binding: with err = 0, 3 of 6 cases fail. The true error is at most 3.4% of the estimate. |
+| Short-T deep-OTM IVs (deferred item) | NaN exactly where time value <= err; finite IVs reprice within err | Consistency of the guard. Negative prices do occur in this test. |
+| Heston IV in the BS limit | 1e-5 / vega | The stage 1 price-gap bound of 1e-5, divided by vega. |
+| Noise-free recovery, REF and STRESS | 2 (\|dr\| + \|r\|) / sigma_min(J), with dr_j = (err_j + 1e-12)/vega_j | First-order perturbation bound with a factor 2 for nonlinearity. The tolerance is about 5e-7; actual errors are 3.5e-12 (REF) and 1.6e-10 (STRESS). |
+| Noisy recovery (IV noise 0.002) | \|z\| < 4 per parameter; Mahalanobis in 5 F(5,23) 0.05% to 99.95% (0.149, 34.0); s^2/sigma^2 in chi2_23/23 quantiles | Linear-Gaussian model with s^2 estimated. False-failure probability is at most 2.8e-3 (z) and 1e-3 (each window). |
+| IV errors vs vega-weighted residuals | 2 (64 eps S0 / vega + 1e-13) | Two inversions; the Taylor term is O(r^2). |
+
+### Reviewer findings and resolutions
+The review agent described itself as "a general-purpose agent running the math-reviewer
+brief". The Agent call used `subagent_type: math-reviewer`.
+
+1. **Major:** the calibration's post-fit IV step ignored the error estimate. A short-dated
+   wing price of -4.6e-12 made `calibrate` raise after converging, and `nanmean` hid any
+   NaNs. Fixed (1289a6f):
+   - Model IVs now go through `heston_implied_vols`, and unresolved IVs are counted.
+   - A regression test reproduces the crash on the old code, and now also checks where
+     the NaNs occur.
+2. **Major:** the error-bound test could not fail, because its COS allowance (1.5e-9)
+   exceeded the bound under test. Fixed (4eee4cc): the test now uses a converged COS and a
+   1e-12 allowance. The noise-free calibration bound now uses per-quote error estimates.
+3. **Minor:** the stated false-failure rates assumed a known sigma. Fixed: rates are now
+   given for t_23. The Mahalanobis window uses the exact 5 F(5,23) law, whose upper
+   quantile (34.0) replaces the chi2_5 value (22.1). This corrects the distribution and is
+   not a loosening: the old bound had a true false-failure rate of 0.57%. The seed-7 value
+   of 20.0 passed both.
+4. **Minor:** the README "3%" claim came from no script. Dropped.
+
+Nits:
+- The conditioning scale is floored at 1% of the box.
+- The docstrings say "estimate".
+- An unused binding was removed.
+- Not done: returning an err/vega uncertainty with each IV.
+
+Final re-review: 0 unresolved.
+
 ## Deferred to later stages
-- **Stage 4:** the quad error estimates are currently discarded
+- **Stage 4 (resolved in stage 4):** the quad error estimates are currently discarded
   (`integral, _ = quad(...)` in `analytic.py`), and Heston prices can be slightly
   negative at very short T deep out of the money. The minimum seen was -7.2e-11 over
   T in {1e-3, 1e-2, 0.05} with deep-OTM calls and puts, on the reference and stress
   parameters. Handle both in the implied-vol inversion: clip or guard the prices, and
   use the error estimates.
+  Resolution: the prices are guarded, not clipped. The pricer returns its error estimate;
+  IV inversion reports NaN for a time value within that error and raises beyond it; the
+  calibration's model IVs use the same rule and count unresolved quotes. See the stage 4
+  entry.

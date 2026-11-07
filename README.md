@@ -3,7 +3,8 @@
 Pricing and risk for an autocallable structured product under the Heston stochastic-volatility
 model, in pure NumPy/SciPy (vectorized; no C++, no Numba).
 
-> Status: stage 3 of 7 (semi-analytic European pricer, Monte Carlo, autocallable). Later sections are added as the
+> Status: stage 4 of 7 (semi-analytic European pricer, Monte Carlo, autocallable,
+> implied vols and calibration). Later sections are added as the
 > stages land.
 
 ## Model
@@ -92,6 +93,46 @@ How the pricer is validated:
   multivariate normal CDFs (Girsanov for the knock-in leg). That oracle is itself checked
   against quadrature and the trivariate orthant formula.
 * **Exact payoff limits:** barrier 0, infinite barriers, KI 0 and KI infinite.
+
+## Implied volatility and calibration
+
+**Pricer error estimate.** `heston_call(..., return_error=True)` returns the Lewis
+quadrature's error estimate (QUADPACK's estimate, not a rigorous bound) in price units,
+plus a rounding term. `tests/test_implied_vol.py` checks that it covers the true error
+against a COS oracle converged to < 1e-12.
+
+**Guarded implied volatility** (`hestonlib.implied_vol`):
+* `brentq` runs inside checked no-arbitrage bounds.
+* A price whose time value is within its error bound gives NaN rather than a clipped
+  volatility. This covers deep-OTM short-maturity Heston prices, which can be slightly
+  negative.
+* A price that violates the bounds by more than its error raises.
+
+**Calibration** (`hestonlib.calibration`):
+* Bounded least squares on vega-weighted price errors, which to first order are IV errors.
+* Reported with each fit: parameter SEs from s^2 (J^T J)^-1, the correlation matrix, the
+  scaled condition number, any parameter at a bound, and the Feller ratio (reported, not
+  imposed).
+
+Example (`scripts/calibrate.py`): the reference parameters priced by the COS oracle on
+4 maturities x 7 strikes, with N(0, 0.002^2) noise added to the IVs (seed 2026).
+
+| param | truth | fit | SE |
+|---|---|---|---|
+| v0 | 0.0400 | 0.0398 | 0.0004 |
+| kappa | 2.0000 | 1.9112 | 0.1951 |
+| theta | 0.0400 | 0.0403 | 0.0005 |
+| xi | 0.3000 | 0.2871 | 0.0165 |
+| rho | -0.7000 | -0.7160 | 0.0269 |
+
+* Every parameter is within 0.8 SE of the truth.
+* IV RMSE is 0.00153 and the Feller ratio is 1.868.
+* The scaled condition number is 24.4.
+* kappa is the least identified parameter (relative SE about 10%). Its largest
+  correlations are with xi (0.59), and xi in turn correlates with rho (0.78).
+
+Without noise, the same fit recovers both the reference set and a Feller-violating stress
+set to within a bound derived from sigma_min of the Jacobian.
 
 ## How correctness is established
 
