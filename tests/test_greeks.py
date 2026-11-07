@@ -73,8 +73,8 @@ def test_bs_limit_greeks_match_oracle_fd():
     Bump sizes vs the barrier discontinuities: the central-difference truncation error of the
     exact price is c h^2, so FD(h) - FD(h/2) = (3/4) c h^2 and the bias at h is
     (4/3) |FD(h) - FD(h/2)|. It must be below a quarter of this run's SE for each Greek, so
-    the default bumps barely distort the Greek. The oracle's Genz error is about 1e-6 in
-    price, at most 1e-6 / h^2 = 2.5e-7 in gamma, which is negligible."""
+    the default bumps barely distort the Greek. The oracle's Genz error (seeded, abseps
+    1e-10) is below 1e-8 in price, at most 1e-8 / h^2 = 2.5e-9 in gamma, which is negligible."""
     p = HestonParams(**dict(REF, xi=1e-8))
     g = autocallable_greeks(PRODUCT, p, 3, 400_000, seed=5)
     ora = _oracle_fd()
@@ -139,7 +139,16 @@ def test_heston_one_date_delta_and_vega_match_cos_fd():
     larger of |D| + 4 SE(D) with D = FD(32) - FD(64), and sqrt(8/64)(|FD(8) - truth| +
     4 SE(FD(8))); tolerance 4 SE + allowance. Power: the tolerance must be below half the
     change in the true Greek from flipping the sign of rho. _vol_bump is the bump used by
-    autocallable_greeks, so the MC scenarios are those of the production code."""
+    autocallable_greeks, so the MC scenarios are those of the production code.
+
+    What this does and does not show: for these one-date Greeks the Euler bias is below MC
+    resolution at 200k paths (D was within 2 SE(D) of 0 on every seed tried in review), so
+    the allowance is in effect statistical and the test does not resolve the Greek's
+    step-size dependence. Bias shrinkage with dt is shown for prices in test_mc and
+    test_autocall; under CRN a Greek's bias is a difference of those price biases. The power
+    alternative is a sign flip of rho: a nearby rho (-0.5) moves the one-date delta by only
+    0.0016, below what 200k paths can resolve. Gamma and rho are tested only in the BS limit;
+    they use the same scenario code as delta and vega."""
     p = HestonParams(**REF)
     assert _vol_bump(p, H_VOL).v0 == pytest.approx(_vb(REF, H_VOL)["v0"], abs=1e-15)
     truth, flipped = _replication_fd(REF), _replication_fd(dict(REF, rho=-REF["rho"]))
