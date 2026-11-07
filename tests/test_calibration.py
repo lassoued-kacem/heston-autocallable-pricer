@@ -88,7 +88,7 @@ def test_noisy_recovery_is_consistent_with_reported_se():
     # overstated SE (for example a missing s^2 factor).
     cov = np.outer(res.se, res.se) * res.corr
     maha = float(delta @ np.linalg.solve(cov, delta))
-    lo_m, hi_m = 5 * f_dist.ppf([0.0005, 0.9995], 5, m_dof := res.iv_errors.size - 5)
+    lo_m, hi_m = 5 * f_dist.ppf([0.0005, 0.9995], 5, res.iv_errors.size - 5)
     assert lo_m < maha < hi_m, maha
     m = res.iv_errors.size
     s2 = np.sum(res.iv_errors**2) / (m - 5)
@@ -120,6 +120,11 @@ def test_short_dated_wings_do_not_crash_and_unresolved_ivs_are_counted():
     res = calibrate(Surface(S0, r, q, mats, strikes, np.array(rows)))
     nan = np.isnan(res.iv_errors)
     assert res.n_iv_unresolved == int(nan.sum())
+    # NaNs sit exactly where the fitted model's time value is within its error estimate.
+    for i, T in enumerate(mats):
+        price, err = heston_call(strikes, T, res.params, return_error=True)
+        lo = np.maximum(S0 * np.exp(-q * T) - strikes * np.exp(-r * T), 0.0)
+        assert np.array_equal(nan[i], price - lo <= err), (T, price - lo, err)
     assert res.n_iv_unresolved >= 1  # the regime the regression is about does occur
     assert np.isfinite(res.iv_rmse)
     assert res.iv_rmse == pytest.approx(np.sqrt(np.mean(res.iv_errors[~nan] ** 2)), rel=1e-12)
