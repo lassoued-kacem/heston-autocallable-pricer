@@ -100,6 +100,10 @@ def main():  # pragma: no cover - exercised through streamlit's AppTest
     import altair as alt
     import streamlit as st
 
+    cached_price = st.cache_data(max_entries=32)(price_view)
+    cached_greeks = st.cache_data(max_entries=32)(greeks_view)
+    cached_smile = st.cache_data(max_entries=32)(smile_view)
+
     st.set_page_config(page_title="Heston autocallable", layout="wide")
     st.title("Heston autocallable")
     st.caption("Full-truncation Euler Monte Carlo with antithetic variates. "
@@ -109,7 +113,7 @@ def main():  # pragma: no cover - exercised through streamlit's AppTest
         st.header("Model")
         c = DEFAULTS
         S0 = st.number_input("spot S0", 1.0, 1000.0, c["S0"])
-        ref = st.number_input("fixing (initial level)", 1.0, 1000.0, 100.0)
+        ref = st.number_input("fixing (initial level)", 1.0, 1000.0, c["S0"])
         r = st.number_input("rate r", -0.05, 0.2, c["r"], format="%.4f")
         q = st.number_input("dividend yield q", 0.0, 0.2, c["q"], format="%.4f")
         v0 = st.number_input("v0", 1e-4, 1.0, c["v0"], format="%.4f")
@@ -141,9 +145,10 @@ def main():  # pragma: no cover - exercised through streamlit's AppTest
     tab_price, tab_greeks, tab_smile = st.tabs(["Price", "Greeks", "Smile"])
 
     with tab_price:
-        summary, probs = st.cache_data(price_view)(product, p, spy, n_paths, int(seed), ref)
+        summary, probs = cached_price(product, p, spy, n_paths, int(seed), ref)
         price, se = summary.loc[0, "value"], summary.loc[0, "SE"]
         st.metric("price (per 100 notional)", f"{price:.4f}", help=f"SE {se:.4f}")
+        st.caption(f"standard error {se:.4f}")
         st.write(f"95% interval: {price - 1.96 * se:.4f} to {price + 1.96 * se:.4f}")
         st.dataframe(summary, hide_index=True)
         chart = alt.Chart(probs).mark_bar(color="#2a78d6", cornerRadiusEnd=4).encode(
@@ -162,13 +167,13 @@ def main():  # pragma: no cover - exercised through streamlit's AppTest
             st.warning(f"Greeks not available: {problem}.")
         elif st.button("compute Greeks"):
             try:
-                st.dataframe(st.cache_data(greeks_view)(product, p, spy, n_paths, int(seed), ref),
+                st.dataframe(cached_greeks(product, p, spy, n_paths, int(seed), ref),
                              hide_index=True)
             except ValueError as e:  # e.g. spot within the 2% bump of zero
                 st.error(f"Greeks not available: {e}")
 
     with tab_smile:
-        df = st.cache_data(smile_view)(p)
+        df = cached_smile(p)
         st.write("Black-Scholes implied vols of semi-analytic Heston call prices. Quotes "
                  "whose time value is within the pricer's error estimate have no "
                  "resolvable implied vol and are left blank.")
