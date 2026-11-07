@@ -155,7 +155,7 @@ The bumps are sized against the barrier discontinuities. An exact BS oracle puts
 finite-difference truncation bias below a quarter of the Greek's SE at 400k paths. Smaller
 spot bumps inflate the gamma variance, which grows like 1/h^3 for a digital-type jump.
 
-<!-- numbers-from: scripts/greeks.py scripts/price_autocallable.py -->
+<!-- numbers-from: scripts/greeks.py -->
 Reference note (`scripts/greeks.py`, 48 steps, 1,000,000 antithetic paths, seed 2026):
 
 | Greek | value | SE |
@@ -165,7 +165,9 @@ Reference note (`scripts/greeks.py`, 48 steps, 1,000,000 antithetic paths, seed 
 | gamma | -0.0160 | 0.0016 |
 | vega (per unit vol) | -49.9824 | 0.2765 |
 | rho (per unit rate) | -94.5984 | 1.0356 |
+<!-- end-numbers -->
 
+<!-- numbers-from: scripts/greeks.py scripts/price_autocallable.py -->
 This run's 48-step price (99.5159) is not identical to the pricing script's 48-step price
 (99.5063). The pricing script draws its normals on a 192-step grid, so the two runs share
 only part of their random stream. Each SE is 0.0150.
@@ -207,9 +209,10 @@ per halving of dt, D(n) = MC(n) - MC(2n), is:
 | 64 to 128 | +0.0833 | 0.0062 |
 | 128 to 256 | +0.0259 | 0.0056 |
 
-The first two changes are pre-asymptotic. From 16 steps on, each change is half the
-previous one or less, so the decay is currently faster than weak order 1 (which predicts
-a factor of 2). The slope -1 guide in the figure lies above the data there.
+The first two changes are pre-asymptotic. The 16-to-32 change is about half the 8-to-16
+change, as weak order 1 predicts. From 32 steps on, each change is less than half the
+previous one, so the decay is currently faster than order 1. The slope -1 guide in the
+figure lies above the data there.
 
 **Reference set.** The bias is resolved only on coarse grids. The paired changes are:
 * +0.0568 +- 0.0082 from 4 to 8 steps;
@@ -217,8 +220,8 @@ a factor of 2). The slope -1 guide in the figure lies above the data there.
 * +0.0077 +- 0.0033 from 16 to 32.
 
 From 32 steps on, the changes are of the order of their SEs: +0.0019 +- 0.0022,
--0.0008 +- 0.0015 and -0.0021 +- 0.0010. The last one, at about 2 SE with the "wrong"
-sign, is a fluctuation of this seed.
+-0.0008 +- 0.0015 and -0.0021 +- 0.0010. The last one has the "wrong" sign for a monotone bias, but at about 2 SE
+it is consistent with noise.
 <!-- end-numbers -->
 
 ![MC standard error vs paths](docs/figures/se_vs_paths.png)
