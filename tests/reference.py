@@ -218,11 +218,16 @@ def bs_autocall_probabilities(S0, r, q, sigma, obs_times, B):
     return np.array([F[i] - F[i + 1] for i in range(len(t))])
 
 
-def bs_autocallable(S0, r, q, sigma, obs_times, B, KI, c, N=100.0):
-    """Exact BS price of the autocallable (barriers as fractions of S0, coupon c per date)."""
+def bs_autocallable(S0, r, q, sigma, obs_times, B, KI, c, N=100.0, S_ref=None):
+    """Exact BS price of the autocallable (barriers as fractions of the fixing S_ref, coupon
+    c per date). S_ref defaults to S0. With S_ref != S0 the barrier levels B S_ref and
+    KI S_ref are fixed, so b = ln(B S_ref / S0), and the KI redemption N S_T / S_ref is
+    (S0 / S_ref) times N S_T / S0."""
+    ref = S0 if S_ref is None else float(S_ref)
     t = np.asarray(obs_times, float)
     n = len(t)
-    mu, b, k = r - q - 0.5 * sigma**2, np.log(B), np.log(min(KI, B))
+    mu = r - q - 0.5 * sigma**2
+    b, k = np.log(B * ref / S0), np.log(min(KI, B) * ref / S0)
     cov = sigma**2 * np.minimum.outer(t, t)
     F = [1.0] + [_mvn_below(np.full(i, b), mu * t[:i], cov[:i, :i]) for i in range(1, n + 1)]
     up = np.full(n, b)
@@ -230,4 +235,5 @@ def bs_autocallable(S0, r, q, sigma, obs_times, B, KI, c, N=100.0):
     G = _mvn_below(up, mu * t, cov)
     G_star = _mvn_below(up, (mu + sigma**2) * t, cov)
     price = sum(N * (1 + c * (i + 1)) * np.exp(-r * t[i]) * (F[i] - F[i + 1]) for i in range(n))
-    return price + N * np.exp(-r * t[-1]) * (F[n] - G) + N * np.exp(-q * t[-1]) * G_star
+    return (price + N * np.exp(-r * t[-1]) * (F[n] - G)
+            + N * (S0 / ref) * np.exp(-q * t[-1]) * G_star)

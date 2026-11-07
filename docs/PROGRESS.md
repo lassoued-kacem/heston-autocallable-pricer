@@ -242,6 +242,64 @@ Nits:
 
 Final re-review: 0 unresolved.
 
+## Stage 5: Greeks (merged, tagged v0.2.0)
+
+### What was built
+- `price_autocallable(..., ref_spot=...)`: the note's fixing, separate from spot. The
+  payoff is scale invariant, so bumping spot together with the fixing gives zero delta.
+- `src/hestonlib/greeks.py`: `autocallable_greeks`, bump-and-revalue with common random
+  numbers (one seed for every scenario).
+
+  | Greek | bump |
+  |---|---|
+  | delta, gamma | 2% of the fixing |
+  | vega | parallel shift of sqrt(v0) and sqrt(theta) by 0.01 |
+  | rho | 1e-3 |
+
+  Each Greek's SE comes from its per-path paired differences, on antithetic pair means.
+- `tests/reference.py`: `bs_autocallable(..., S_ref=...)`, with a closed-form self-check.
+- `scripts/greeks.py`, whose output the README quotes.
+
+### Tests
+96 passing in total (7 in `test_greeks.py`); full suite about 68 s.
+
+### Tolerances and why
+| Check | Tolerance | Justification |
+|---|---|---|
+| Scale invariance (spot and fixing x 1.3) | 1e-10 | Paths scale exactly, so the per-path PVs are identical. |
+| Delta equals a manual CRN paired difference | 1e-12 | Structural identity. |
+| BS limit: price, delta, gamma, vega, rho vs the oracle FD at the same bumps | 4 SE | Every scenario is unbiased (exact GBM at the dates), so the MC FD is unbiased for the oracle FD. FD truncation does not enter. |
+| Bump sizes | Richardson bias 4/3 \|FD(h) - FD(h/2)\| < SE/4 for each Greek | The default bumps barely distort the Greek. Vega is the tightest (0.077 vs about 0.11). |
+| Live note (spot 95, fixing 100): delta vs oracle | 4 SE | Exercises `ref_spot`. A planted "fixing follows spot" bug fails it. |
+| Greek SEs vs spread over 200 seeds | chi2_199/199 0.05% to 99.95% (0.70 to 1.36) | Ratios were 0.85 to 1.20 over several seed bases. The mean over 10k pairs is near normal despite heavy-tailed per-path values. |
+| Heston one-date delta and vega vs COS replication FD | 4 SE + max(Richardson, order-1/2 from n = 8); cap: half the rho-flip change | Stage 2 construction. The Greeks' Euler bias is below MC resolution here, so the allowance is in effect statistical. Shrinkage with dt is shown at price level (test_mc, test_autocall). A nearby rho alternative is not resolvable at 200k paths. |
+
+A mutation check was run before review. These planted bugs were caught:
+- vol bump on v0 only;
+- no CRN;
+- wrong gamma scale;
+- fixing recomputed from the bumped spot (caught after the live-note test was added).
+
+### Reviewer findings and resolutions
+The first report called itself "a general-purpose agent". The harness metadata
+(`subagents/agent-*.meta.json`) shows agentType "math-reviewer", isBuiltIn false, for every
+stage's review, including stage 4's, which made the same claim. The reviewer corrected
+itself in the re-review.
+
+1. **Minor:** the Greeks docstring misdescribed the discontinuities (the KI is a jump of
+   N(1 - KI), not a kink) and the default bump (2%, not 1%). Fixed (aa11bee).
+2. **Minor:** the README quoted an SE (0.021) for the difference between the two 48-step
+   prices. It came from no script and was wrong, because the runs share part of their
+   random stream. Fixed: the SE is dropped, and only script outputs are quoted.
+3. **Minor:** the Heston one-date Greek test's allowance is noise-dominated and does not
+   show bias shrinkage. Resolved by documentation (the reviewer's judgement: an assertion
+   would be vacuous or flaky at feasible path counts). The docstring states the limits and
+   cites the price-level shrinkage tests.
+4. **Nits:** shadowed name `q`, implicit antithetic flag, an overstated Genz error, the
+   sign of the autocall jump, and the 4/h^2 Genz weight in gamma. All fixed.
+
+Final re-review: 0 unresolved.
+
 ## Deferred to later stages
 - **Stage 4 (resolved in stage 4):** the quad error estimates are currently discarded
   (`integral, _ = quad(...)` in `analytic.py`), and Heston prices can be slightly

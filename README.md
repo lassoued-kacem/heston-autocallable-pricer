@@ -3,8 +3,8 @@
 Pricing and risk for an autocallable structured product under the Heston stochastic-volatility
 model, in pure NumPy/SciPy (vectorized; no C++, no Numba).
 
-> Status: stage 4 of 7 (semi-analytic European pricer, Monte Carlo, autocallable,
-> implied vols and calibration). Later sections are added as the
+> Status: stage 5 of 7 (semi-analytic European pricer, Monte Carlo, autocallable,
+> implied vols and calibration, Greeks). Later sections are added as the
 > stages land.
 
 ## Model
@@ -133,6 +133,43 @@ Example (`scripts/calibrate.py`): the reference parameters priced by the COS ora
 
 Without noise, the same fit recovers both the reference set and a Feller-violating stress
 set to within a bound derived from sigma_min of the Jacobian.
+
+## Greeks (`hestonlib.greeks`)
+
+Bump-and-revalue with **common random numbers**: every scenario uses the same seed. Each
+Greek's SE comes from its own per-path differences, taken on antithetic pair means. The
+note's fixing (`ref_spot`) stays put while spot is bumped. The payoff is scale invariant,
+so bumping both would give zero delta.
+
+| Greek | bump |
+|---|---|
+| delta, gamma | 2% of the fixing |
+| vega | parallel 1-vol-point shift of sqrt(v0) and sqrt(theta) |
+| rho | 1e-3 in r |
+
+The bumps are sized against the barrier discontinuities. An exact BS oracle puts the
+finite-difference truncation bias below a quarter of the Greek's SE at 400k paths. Smaller
+spot bumps inflate the gamma variance, which grows like 1/h^3 for a digital-type jump.
+
+Reference note (`scripts/greeks.py`, 48 steps, 1,000,000 antithetic paths, seed 2026):
+
+| Greek | value | SE |
+|---|---|---|
+| price | 99.5159 | 0.0150 |
+| delta | 0.2757 | 0.0016 |
+| gamma | -0.0160 | 0.0016 |
+| vega (per unit vol) | -49.9824 | 0.2765 |
+| rho (per unit rate) | -94.5984 | 1.0356 |
+
+This run's 48-step price (99.5159) is not identical to the pricing script's 48-step price
+(99.5063). The pricing script draws its normals on a 192-step grid, so the two runs share
+only part of their random stream. Each SE is 0.0150.
+
+How the Greeks are tested:
+* In the BS limit, against the same finite difference of the MVN oracle.
+* For one Heston date, against the same finite difference of the COS replication, with an
+  Euler bias allowance and a power cap.
+* Over 200 seeds, the reported SEs match the observed spread.
 
 ## How correctness is established
 
