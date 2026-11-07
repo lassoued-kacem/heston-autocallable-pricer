@@ -39,6 +39,7 @@ def main():
     print(f"{'param':>6} {'truth':>8} {'fit':>9} {'SE':>8} {'z':>6}")
     for n, t, x, s in zip(NAMES, truth, res.x, res.se):
         print(f"{n:>6} {t:>8.4f} {x:>9.4f} {s:>8.4f} {(x - t) / s:>6.2f}")
+    print(f"max |z| = {np.max(np.abs((res.x - truth) / res.se)):.2f}")
     print(f"IV RMSE {res.iv_rmse:.5f} (noise sd {NOISE})")
     print(f"Feller ratio 2 kappa theta / xi^2 = {res.feller_ratio:.3f} "
           f"({'satisfied' if res.feller_ratio >= 1 else 'violated'}; reported, not imposed)")
