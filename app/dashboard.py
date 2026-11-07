@@ -56,6 +56,15 @@ def price_view(product, p, steps_per_year, n_paths, seed, ref_spot):
     return summary, probs
 
 
+GREEK_UNITS = {
+    "price": "per 100 notional",
+    "delta": "per 1 unit of spot",
+    "gamma": "per 1 unit of spot, squared",
+    "vega": "per 1.00 of vol (sqrt(v0), sqrt(theta) shifted in parallel)",
+    "rho": "per 1.00 of rate",
+}
+
+
 def greeks_problem(p: HestonParams, ref_spot: float, h_spot=0.02, h_vol=0.01):
     """Why the default bumps cannot be applied at this state (None if they can)."""
     if p.S0 - h_spot * ref_spot <= 0:
@@ -68,8 +77,14 @@ def greeks_problem(p: HestonParams, ref_spot: float, h_spot=0.02, h_vol=0.01):
 def greeks_view(product, p, steps_per_year, n_paths, seed, ref_spot):
     g = autocallable_greeks(product, p, n_steps_for(product, steps_per_year), n_paths, seed,
                             ref_spot=ref_spot)
-    return pd.DataFrame({"Greek": list(g), "value": [v.price for v in g.values()],
-                         "SE": [v.se for v in g.values()]})
+    df = pd.DataFrame({"Greek": list(g), "value": [v.price for v in g.values()],
+                       "SE": [v.se for v in g.values()]})
+    df["units"] = df["Greek"].map(GREEK_UNITS)
+    # Desk conventions alongside: vega per vol point (0.01) and rho per basis point (1e-4).
+    scale = df["Greek"].map({"vega": 0.01, "rho": 1e-4})
+    df["per vol point / per bp"] = df["value"] * scale
+    df["SE (per vol point / per bp)"] = df["SE"] * scale
+    return df
 
 
 def smile_view(p, maturities=(0.25, 0.5, 1.0, 2.0), moneyness=np.linspace(0.7, 1.3, 13)):

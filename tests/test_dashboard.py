@@ -50,6 +50,10 @@ def test_greeks_view_reports_each_greek_with_se(ref_params):
     df = D.greeks_view(pr, ref_params, 12, 20_000, 1, 100.0)
     assert list(df["Greek"]) == ["price", "delta", "gamma", "vega", "rho"]
     assert np.all(df["SE"] > 0)
+    assert df["units"].notna().all()  # every Greek states its units
+    row = df.set_index("Greek")
+    assert row.loc["vega", "per vol point / per bp"] == pytest.approx(row.loc["vega", "value"] / 100)
+    assert row.loc["rho", "per vol point / per bp"] == pytest.approx(row.loc["rho", "value"] * 1e-4)
 
 
 def test_smile_view_is_flat_in_bs_limit():
