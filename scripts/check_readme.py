@@ -8,8 +8,8 @@ digit and including the sign; an explicit "+" counts as no sign. Exits 1 on any 
 
 convergence.py is run with --figures-dir pointing to a temporary directory, so the check
 never rewrites docs/figures; the fresh PNGs are compared byte for byte with the committed
-ones and the result is reported (a mismatch is informational: PNG bytes depend on the
-matplotlib version, the numbers do not).
+ones and the result is reported. A mismatch fails the check only with --strict-figures:
+PNG bytes depend on the matplotlib version, the numbers do not.
 
 Limits (what this cannot catch): matching is by set membership, so a number placed in the
 wrong row or label passes if it appears anywhere in the output, and a sign flip passes if
@@ -36,7 +36,13 @@ def numbers(text):
     return {m.group(0).replace("+", "") for m in NUM.finditer(text)}
 
 
-def main():
+def main(argv=None):
+    import argparse
+
+    ap = argparse.ArgumentParser(description="Check README numbers against script output.")
+    ap.add_argument("--strict-figures", action="store_true",
+                    help="also fail if the committed figures differ from freshly rendered ones")
+    strict = ap.parse_args(argv).strict_figures
     readme = (ROOT / "README.md").read_text()
     blocks = BLOCK.findall(readme)
     if not blocks:
@@ -63,7 +69,8 @@ def main():
             fresh, committed = Path(tmp) / name, ROOT / "docs/figures" / name
             if fresh.exists():
                 same = committed.exists() and fresh.read_bytes() == committed.read_bytes()
-                print(f"  figure {name}: {'identical to committed' if same else 'DIFFERS from committed (informational)'}")
+                print(f"  figure {name}: {'identical to committed' if same else 'DIFFERS from committed'}")
+                failed |= strict and not same
     print("README numbers match script output" if not failed else "README has numbers not in script output")
     return 1 if failed else 0
 
