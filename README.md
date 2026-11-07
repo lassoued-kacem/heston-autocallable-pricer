@@ -161,9 +161,9 @@ Reference note (`scripts/greeks.py`, 48 steps, 1,000,000 antithetic paths, seed 
 | vega (per unit vol) | -49.9824 | 0.2765 |
 | rho (per unit rate) | -94.5984 | 1.0356 |
 
-This run's normals differ from the pricing script's 192-step grid, so its 48-step price is
-not identical to the one above. The two differ by 0.0096, against an SE of the difference
-of about 0.021.
+This run's 48-step price (99.5159) is not identical to the pricing script's 48-step price
+(99.5063). The pricing script draws its normals on a 192-step grid, so the two runs share
+only part of their random stream. Each SE is 0.0150.
 
 How the Greeks are tested:
 * In the BS limit, against the same finite difference of the MVN oracle.
