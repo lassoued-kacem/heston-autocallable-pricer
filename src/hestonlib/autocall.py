@@ -7,6 +7,9 @@ Product (notional N, observation times t_1 < ... < t_n = T, levels relative to S
 * If it is never called, at T it pays N if S_T >= KI * S0 (European knock-in, observed at
   maturity only), and N * S_T / S0 otherwise.
 
+Here S0 is the initial fixing (``ref_spot``). For a note struck today it equals the current
+spot, which is the default; for risk on a live note, the fixing stays put while spot moves.
+
 Every cashflow is discounted at exp(-r t) for its own payment date. The dividend yield q
 enters only through the simulated drift.
 """
@@ -88,16 +91,20 @@ def price_autocallable(
     seed: int = 0,
     antithetic: bool = True,
     rng_steps: int | None = None,
+    ref_spot: float | None = None,
 ) -> AutocallResult:
     """MC price of ``product`` under ``p`` with full-truncation Euler on ``n_steps`` steps.
 
     The observation dates must lie on the uniform grid of ``n_steps`` steps over [0, T].
+    ``ref_spot`` is the note's initial fixing, which sets the barrier levels and the KI
+    redemption N S_T / ref_spot. It defaults to the current spot p.S0 (a note struck today).
     """
+    ref = p.S0 if ref_spot is None else float(ref_spot)
     paths = simulate(
         p, product.maturity, n_steps, n_paths, seed,
         obs_times=product.obs_times, antithetic=antithetic, rng_steps=rng_steps,
     )
-    pv, idx = autocallable_pv(product, paths.S, p.S0, p.r)
+    pv, idx = autocallable_pv(product, paths.S, ref, p.r)
     res = paths.estimate(pv)
     n_obs = len(product.obs_times)
     ind = (idx[:, None] == np.arange(1, n_obs + 1)[None, :]).astype(float)
@@ -105,7 +112,7 @@ def price_autocallable(
     t = np.asarray(product.obs_times)
     life = np.where(idx > 0, t[np.maximum(idx, 1) - 1], t[-1])
     ST = paths.S[:, -1]
-    loss = (idx == 0) & (ST < product.ki_barrier * p.S0)
+    loss = (idx == 0) & (ST < product.ki_barrier * ref)
     return AutocallResult(
         price=res.price, se=res.se, n_samples=res.n_samples,
         call_prob=probs.price, call_prob_se=probs.se,
