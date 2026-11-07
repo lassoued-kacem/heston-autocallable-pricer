@@ -8,6 +8,7 @@ Every MC number is shown with its standard error. The computations live in pure 
 
 from __future__ import annotations
 
+import inspect
 import sys
 from pathlib import Path
 
@@ -65,7 +66,11 @@ GREEK_UNITS = {
 }
 
 
-def greeks_problem(p: HestonParams, ref_spot: float, h_spot=0.02, h_vol=0.01):
+_GREEK_DEFAULTS = inspect.signature(autocallable_greeks).parameters
+
+
+def greeks_problem(p: HestonParams, ref_spot: float,
+                   h_spot=_GREEK_DEFAULTS["h_spot"].default, h_vol=_GREEK_DEFAULTS["h_vol"].default):
     """Why the default bumps cannot be applied at this state (None if they can)."""
     if p.S0 - h_spot * ref_spot <= 0:
         return f"spot {p.S0:g} is within the {h_spot:.0%} spot bump ({h_spot * ref_spot:g}) of zero"
