@@ -91,3 +91,22 @@ def test_unresolvable_quotes_are_rejected():
     prices[0, 0] = max(REF["S0"] - K * np.exp(-REF["r"] * T), 0.0)
     with pytest.raises(ValueError):
         calibrate(Surface(s.S0, s.r, s.q, s.maturities, s.strikes, prices))
+
+
+def test_short_dated_wings_do_not_crash_and_unresolved_ivs_are_counted():
+    """Regression (stage 4 review): a 1.5-day maturity with wing quotes priced by BS at 90%
+    vol. Every market IV resolves, but Heston prices at those wings sit within the
+    quadrature error of zero (and may be slightly negative). The fit must not raise, and
+    model IVs that the model price cannot resolve are NaN and counted, never silently
+    dropped. Consistency: the count equals the number of NaNs, and RMSE uses the rest."""
+    S0, r, q = REF["S0"], REF["r"], REF["q"]
+    mats = np.array([0.004, 0.25, 1.0])
+    strikes = np.array([70.0, 100.0, 130.0])
+    rows = [R.bs_price(S0, strikes, mats[0], r, q, 0.9)]
+    rows += [R.cos_call(S0, strikes, T, *model_args(REF)) for T in mats[1:]]
+    res = calibrate(Surface(S0, r, q, mats, strikes, np.array(rows)))
+    nan = np.isnan(res.iv_errors)
+    assert res.n_iv_unresolved == int(nan.sum())
+    assert res.n_iv_unresolved >= 1  # the regime the regression is about does occur
+    assert np.isfinite(res.iv_rmse)
+    assert res.iv_rmse == pytest.approx(np.sqrt(np.mean(res.iv_errors[~nan] ** 2)), rel=1e-12)

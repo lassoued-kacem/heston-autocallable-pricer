@@ -8,7 +8,8 @@ is the vega-weighted price error
 
 which to first order equals the implied-volatility error IV_model,j - IV_market,j, so the
 loss is the sum of squared IV errors without an IV inversion inside every evaluation. The
-final IV errors are computed exactly by inversion and reported separately.
+final IV errors are computed exactly by inversion (with the pricer's error bound) and
+reported separately, together with the number of model IVs that are not resolvable.
 
 Identifiability: with J the residual Jacobian at the solution and s^2 = RSS / (m - 5) the
 residual variance, Cov(theta_hat) ~ s^2 (J^T J)^{-1} when the IV errors are iid. The standard
@@ -26,7 +27,7 @@ from scipy.optimize import least_squares
 
 from hestonlib.analytic import heston_call
 from hestonlib.black_scholes import bs_vega
-from hestonlib.implied_vol import implied_vols
+from hestonlib.implied_vol import heston_implied_vols, implied_vols
 from hestonlib.params import HestonParams
 
 NAMES = ("v0", "kappa", "theta", "xi", "rho")
@@ -64,8 +65,9 @@ class CalibrationResult:
     cond: float
     jac: np.ndarray  # residual Jacobian at the solution, shape (m, 5)
     residuals: np.ndarray  # vega-weighted residuals at the solution
-    iv_errors: np.ndarray
-    iv_rmse: float
+    iv_errors: np.ndarray  # model IV - market IV; NaN where the model IV is unresolvable
+    iv_rmse: float  # over the resolved quotes only
+    n_iv_unresolved: int  # model IVs not resolvable from the model price (reported, not hidden)
     feller_ratio: float
     at_bound: tuple[str, ...]
     nfev: int
@@ -110,15 +112,18 @@ def calibrate(surface: Surface, x0=(0.06, 1.0, 0.06, 0.5, -0.4), xtol=1e-12, fto
     cond = float(np.linalg.cond(J * np.abs(x)[None, :]))
 
     p = _params(x, surface.S0, surface.r, surface.q)
-    iv_model = np.array([implied_vols(heston_call(surface.strikes, T, p), surface.S0,
-                                      surface.strikes, T, surface.r, surface.q)
+    # Model IVs use the pricer's error bound: a model price whose time value is within its
+    # quadrature error (short-dated wings, possibly slightly negative) has no resolvable IV.
+    iv_model = np.array([heston_implied_vols(surface.strikes, T, p)[0]
                          for T in surface.maturities])
     iv_err = iv_model - iv_mkt
+    n_unres = int(np.sum(np.isnan(iv_err)))
+    rmse = float(np.sqrt(np.mean(iv_err[~np.isnan(iv_err)] ** 2))) if n_unres < iv_err.size else np.nan
     tol_b = 1e-6 * (UPPER - LOWER)
     at_bound = tuple(n for n, xi_, lo, hi, tb in zip(NAMES, x, LOWER, UPPER, tol_b)
                      if xi_ - lo < tb or hi - xi_ < tb)
     return CalibrationResult(
         params=p, x=x, se=se, corr=corr, cond=cond, jac=J, residuals=sol.fun, iv_errors=iv_err,
-        iv_rmse=float(np.sqrt(np.nanmean(iv_err**2))), feller_ratio=p.feller_ratio,
+        iv_rmse=rmse, n_iv_unresolved=n_unres, feller_ratio=p.feller_ratio,
         at_bound=at_bound, nfev=sol.nfev, success=bool(sol.success), message=sol.message,
     )
