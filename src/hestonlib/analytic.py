@@ -6,15 +6,19 @@ Let X_T = ln(S_T / F_T) with forward F_T = S0 exp((r - q) T), so E[e^{X_T}] = 1.
 In Gatheral's notation (The Volatility Surface, ch. 2) with the Albrecher et al. (2007)
 "little Heston trap" choice of root:
 
-    alpha = -(u^2 + i u)/2,  beta = kappa - rho xi i u,  gamma = xi^2 / 2
-    d     = sqrt(beta^2 - 4 alpha gamma)
-    r_pm  = (beta +- d) / xi^2,      g = r_- / r_+
+    w     = u^2 + i u,   beta = kappa - rho xi i u,   d = sqrt(beta^2 + xi^2 w)
+    r_-   = (beta - d) / xi^2 = -w / (beta + d)
+    g     = (beta - d) / (beta + d) = -xi^2 w / (beta + d)^2
     D(T)  = r_- (1 - e^{-dT}) / (1 - g e^{-dT})
-    C(T)  = kappa [ r_- T - (2 / xi^2) ln((1 - g e^{-dT}) / (1 - g)) ]
+    C(T)  = kappa [ r_- T - (2 / xi^2) ln(1 + y) ],   y = g (1 - e^{-dT}) / (1 - g)
     phi(u) = E[e^{i u X_T}] = exp(C(T) theta + D(T) v0)
 
-Using e^{-dT} with Re(d) > 0 (the principal sqrt) gives |g e^{-dT}| < 1 along the integration
-path, so the principal complex log stays on one branch (no discontinuity in the integrand).
+The right-hand (conjugate) forms are the ones evaluated: they avoid the cancellation in
+beta - d as xi -> 0. ln(1 + y) is computed as 2 artanh(y / (2 + y)), which has the same
+principal branch cut (y real < -1) and is accurate for small complex y.
+Using e^{-dT} with Re(d) > 0 keeps 1 + y away from the negative real axis in the regimes
+tested (rho < 0, and generally kappa > rho xi / 2, where |g| < 1), so the integrand is
+continuous in u. This is verified numerically by the continuity and stress tests.
 
 Lewis (2001) single-integral call price
 ---------------------------------------
