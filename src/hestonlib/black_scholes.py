@@ -26,3 +26,13 @@ def bs_price(S0, K, T, r, q, sigma, kind: str = "call"):
     if kind == "put":
         return call - fwd_disc_S + disc_K
     raise ValueError(f"kind must be 'call' or 'put', got {kind!r}")
+
+
+def bs_vega(S0, K, T, r, q, sigma):
+    """dC/dsigma = S0 e^{-qT} phi(d1) sqrt(T) (same for calls and puts). Vectorized."""
+    S0, K, sigma = (np.asarray(a, dtype=float) for a in (S0, K, sigma))
+    if T <= 0 or np.any(sigma <= 0):
+        raise ValueError("need T > 0 and sigma > 0")
+    sd = sigma * np.sqrt(T)
+    d1 = (np.log(S0 / K) + (r - q) * T) / sd + 0.5 * sd
+    return S0 * np.exp(-q * T) * np.exp(-0.5 * d1 * d1) / np.sqrt(2.0 * np.pi) * np.sqrt(T)
