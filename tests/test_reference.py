@@ -82,3 +82,96 @@ def test_cos_digital_matches_bs_digital_in_limit():
     expected = np.exp(-d["r"] * T) * norm.cdf(-d2)
     got = R.cos_digital_put(100.0, K, T, *model_args(d))
     assert np.max(np.abs(got - expected)) < 1e-4
+
+
+# --------------------------------------------------------------------------- BS autocallable
+from scipy.integrate import quad  # noqa: E402
+from scipy.stats import norm  # noqa: E402
+
+AC = dict(S0=100.0, r=0.03, q=0.01, sigma=0.2, B=1.0, KI=0.6, c=0.08)
+
+
+def _bs_continuation(x, dt, mu, s, b, k, c_next, r, N):
+    """Value at t_i, given X_i = x < b, of the last date at t_i + dt (closed form):
+    N (1 + c_next) P(call) + N P(KI <= S < B) + N E[e^{X} ; X < k], discounted over dt."""
+    m, sd = x + mu * dt, s * np.sqrt(dt)
+    p_call = 1 - norm.cdf((b - m) / sd)
+    p_mid = norm.cdf((b - m) / sd) - norm.cdf((k - m) / sd)
+    e_ki = np.exp(m + 0.5 * sd * sd) * norm.cdf((k - m - sd * sd) / sd)
+    return np.exp(-r * dt) * N * ((1 + c_next) * p_call + p_mid + e_ki)
+
+
+def test_bs_autocallable_one_date_closed_form():
+    """n = 1 is European: N (1+c) e^{-rT} N(d2(B)) + N e^{-rT} [N(-d2(B)) - N(-d2(KI))]
+    + N e^{-qT} N(-d1(KI)), with d1, d2 the BS terms at strike K S0. Tolerance 1e-12."""
+    S0, r, q, s, B, KI, c = AC.values()
+    T, N = 1.5, 100.0
+
+    def d12(K):
+        d1 = (np.log(1 / K) + (r - q + 0.5 * s * s) * T) / (s * np.sqrt(T))
+        return d1, d1 - s * np.sqrt(T)
+
+    _, d2b = d12(B)
+    d1k, d2k = d12(KI)
+    expect = N * (1 + c) * np.exp(-r * T) * norm.cdf(d2b) + N * np.exp(-r * T) * (
+        norm.cdf(-d2b) - norm.cdf(-d2k)) + N * np.exp(-q * T) * norm.cdf(-d1k)
+    assert abs(R.bs_autocallable(S0, r, q, s, [T], B, KI, c, N) - expect) < 1e-12
+
+
+def test_bs_autocallable_two_dates_vs_quadrature():
+    """n = 2 by 1-D quadrature over X_1 with the closed-form last date. quad runs to
+    1e-12; the bivariate normal CDF is accurate to about 1e-10. Tolerance 1e-8 on a price
+    of about 100."""
+    S0, r, q, s, B, KI, c = AC.values()
+    mu, b, k, N = r - q - 0.5 * s * s, np.log(B), np.log(KI), 100.0
+
+    def f(x1):
+        return norm.pdf(x1, mu, s) * _bs_continuation(x1, 1.0, mu, s, b, k, 2 * c, r, N)
+
+    cont = quad(f, mu - 12 * s, b, epsabs=1e-12, epsrel=1e-12, limit=200)[0]
+    expect = np.exp(-r) * (N * (1 + c) * (1 - norm.cdf((b - mu) / s)) + cont)
+    assert abs(R.bs_autocallable(S0, r, q, s, [1.0, 2.0], B, KI, c, N) - expect) < 1e-8
+
+
+def test_bs_autocallable_three_dates_vs_nested_quadrature():
+    """n = 3 by nested 1-D quadratures. The trivariate CDF comes from Genz's randomized
+    integration (requested abseps 1e-10); a 5e-8 price difference was seen when this was
+    built. Tolerance 1e-6 on a price of about 100 (a probability error of 1e-8)."""
+    S0, r, q, s, B, KI, c = AC.values()
+    mu, b, k, N = r - q - 0.5 * s * s, np.log(B), np.log(KI), 100.0
+
+    def at_t1(x1):
+        g = lambda x2: norm.pdf(x2, x1 + mu, s) * _bs_continuation(x2, 1.0, mu, s, b, k, 3 * c, r, N)
+        cont = quad(g, x1 + mu - 12 * s, b, epsabs=1e-12, epsrel=1e-12, limit=200)[0]
+        return np.exp(-r) * (N * (1 + 2 * c) * (1 - norm.cdf((b - x1 - mu) / s)) + cont)
+
+    cont = quad(lambda x1: norm.pdf(x1, mu, s) * at_t1(x1), mu - 12 * s, b,
+                epsabs=1e-11, epsrel=1e-11, limit=200)[0]
+    expect = np.exp(-r) * (N * (1 + c) * (1 - norm.cdf((b - mu) / s)) + cont)
+    got = R.bs_autocallable(S0, r, q, s, [1.0, 2.0, 3.0], B, KI, c, N)
+    assert abs(got - expect) < 1e-6, (got, expect)
+
+
+def test_bs_orthant_probability_exact():
+    """For a zero-mean trivariate normal, P(all < 0) = 1/8 + sum_{i<j} asin(rho_ij)/(4 pi).
+    With Brownian correlations rho_ij = sqrt(t_i/t_j) and b = 0, mu = 0 (r - q = sigma^2/2),
+    F_3 = 1 - (sum of call probabilities). Tolerance 1e-8 (Genz abseps 1e-10)."""
+    t = np.array([1.0, 2.0, 3.0])
+    s = 0.2
+    probs = R.bs_autocall_probabilities(100.0, 0.5 * s * s, 0.0, s, t, 1.0)
+    rho = np.sqrt(np.minimum.outer(t, t) / np.maximum.outer(t, t))
+    exact = 1 / 8 + (np.arcsin(rho[0, 1]) + np.arcsin(rho[0, 2]) + np.arcsin(rho[1, 2])) / (4 * np.pi)
+    assert abs((1 - probs.sum()) - exact) < 1e-8
+    assert probs[0] == pytest.approx(0.5, abs=1e-14)  # P(X_1 >= 0) = 1/2 with zero drift
+
+
+def test_bs_autocallable_ki_above_barrier_one_date():
+    """KI > B: every uncalled path is below KI, so for one date the payoff is N (1 + c) if
+    S_T >= B S0 and N S_T / S0 otherwise: N (1+c) e^{-rT} N(d2(B)) + N e^{-qT} N(-d1(B)).
+    This exercises the min(KI, B) branch. Tolerance 1e-12."""
+    S0, r, q, s, _, _, c = AC.values()
+    T, B, KI, N = 2.0, 0.9, 1.1, 100.0
+    d1 = (np.log(1 / B) + (r - q + 0.5 * s * s) * T) / (s * np.sqrt(T))
+    d2 = d1 - s * np.sqrt(T)
+    expect = N * (1 + c) * np.exp(-r * T) * norm.cdf(d2) + N * np.exp(-q * T) * norm.cdf(-d1)
+    assert abs(R.bs_autocallable(S0, r, q, s, [T], B, KI, c, N) - expect) < 1e-12
