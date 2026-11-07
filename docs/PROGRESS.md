@@ -122,6 +122,62 @@ least one test:
 
 Final re-review: 0 unresolved issues.
 
+## Stage 3: autocallable (merged, tagged v0.1.0)
+
+### What was built
+- `src/hestonlib/autocall.py`:
+  - the `Autocallable` product;
+  - `autocallable_pv`, the per-path discounted payoff and call index;
+  - `price_autocallable`, which returns the price and SE plus per-date call probabilities,
+    P(never called), P(loss) and the expected life, each with its SE.
+- Payoff conventions: S >= B calls, the first call ends the note, and the maturity date
+  is an autocall date. The coupon is N(1 + c i) with i 1-based. The knock-in is European
+  (observed at T only) and inclusive (S_T >= KI redeems at par). Each cashflow is
+  discounted at its own date.
+- `tests/reference.py`: `bs_autocallable` and `bs_autocall_probabilities`, an exact
+  discrete-monitoring BS price from multivariate normal CDFs, using Girsanov
+  (drift mu + sigma^2) for the knock-in leg. The Genz integration is seeded, so the
+  oracle is deterministic.
+- `scripts/price_autocallable.py`, whose output the README quotes.
+
+### Tests
+69 passing in total (12 in `tests/test_autocall.py`, 5 new oracle self-checks); full
+suite about 32 s.
+
+### Tolerances and why
+| Check | Tolerance | Justification |
+|---|---|---|
+| Payoff by hand, discounting, KI boundary | 1e-12 | Exact arithmetic. |
+| B = 0; B = inf with KI = 0 | 1e-10, SE < 1e-12 | Zero-variance payoffs with closed-form PV. |
+| B = KI = inf (pays N S_T/S0) | 4 SE | Exact martingale of the scheme: no bias. |
+| One date, Heston, vs COS replication (bond + digital - put) | 4 SE + max(Richardson, order-1/2 from n = 8); cap: half the rho-flip shift (0.354) | Same construction as stage 2. Here the bias is below the noise even at n = 8, so the allowance is in effect statistical. |
+| Four dates, BS limit, vs MVN oracle (price and each call probability) | 4 SE | Log-Euler is exact GBM at the dates. The oracle's error (about 1e-6) is far below 4 SE (about 0.06). |
+| Multi-date Heston bias shrinks (STRESS, coupled) | D(6), D(12) > 4 SE; \|D(6)\| - \|D(48)\| > 4 combined SE | No closed form. Shows the discretization changes shrinking (24-to-48 ratio about 0.5). |
+| Oracle self-checks | 1e-12 (closed forms), 1e-8 (1-D quadrature, orthant formula), 1e-6 (nested quadrature) | Genz integration error with abseps 1e-10; 5e-8 was observed. |
+
+A mutation check was run before review. Each of these planted bugs was caught:
+- strict barrier;
+- 0-based coupon;
+- call discounted at maturity;
+- strict KI;
+- KI observed at all dates;
+- flat coupon.
+
+### Reviewer findings and resolutions
+- First review: 0 unresolved, with five nits. All were addressed and confirmed in a second
+  review (0 unresolved):
+  1. The Genz error was understated (1e-7 against an observed scatter of about 1e-6), and
+     the oracle was not seeded. The docstring is corrected and the integration seeded.
+     I had suspected that the old frozen `multivariate_normal(...)` call dropped
+     abseps/releps. A second review showed that scipy forwards them to the frozen
+     instance, so they were honoured. Only the seeding changed.
+  2. `_single_date_truth` now asserts KI <= B.
+  3. The docstring now says the one-date Euler bias is below the noise.
+  4. A KI > B closed-form test covers the `min(KI, B)` branch. The reviewer also confirmed
+     it with exact-GBM MC.
+  5. The README expected life now carries its SE.
+- README numbers: the reviewer re-ran the script and found every number matched exactly.
+
 ## Deferred to later stages
 - **Stage 4:** the quad error estimates are currently discarded
   (`integral, _ = quad(...)` in `analytic.py`), and Heston prices can be slightly
