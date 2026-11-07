@@ -88,10 +88,11 @@ def test_bs_limit_first_order_in_xi():
 def test_bs_limit_survives_tiny_xi():
     """Regression for a catastrophic cancellation in (beta - d)/xi^2 that gave price errors of
     ~0.4 at xi = 1e-8. The true gap is O(xi), so the linear rate must continue down to
-    xi = 1e-8 (ratio > 8 per two decades is very loose: theory gives 100), and at xi = 1e-8
+    xi = 1e-8 (ratio > 50 per two decades vs theory 100, leaving room for the O(xi^2) term
+    and quadrature noise while still catching partial cancellation), and at xi = 1e-8
     the gap must be < 1e-5, far above the O(1e-8) theory value and far below the bug's 0.4."""
     g = [_bs_gap(x, -0.7) for x in (1e-4, 1e-6, 1e-8)]
-    assert g[0] / g[1] > 8 and g[1] / g[2] > 8, g
+    assert g[0] / g[1] > 50 and g[1] / g[2] > 50, g
     assert g[2] < 1e-5, g
     g0 = [_bs_gap(x, 0.0) for x in (1e-6, 1e-8)]
     assert max(g0) < 1e-5, g0
