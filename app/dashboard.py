@@ -56,6 +56,15 @@ def price_view(product, p, steps_per_year, n_paths, seed, ref_spot):
     return summary, probs
 
 
+def greeks_problem(p: HestonParams, ref_spot: float, h_spot=0.02, h_vol=0.01):
+    """Why the default bumps cannot be applied at this state (None if they can)."""
+    if p.S0 - h_spot * ref_spot <= 0:
+        return f"spot {p.S0:g} is within the {h_spot:.0%} spot bump ({h_spot * ref_spot:g}) of zero"
+    if np.sqrt(p.v0) < h_vol or np.sqrt(p.theta) < h_vol:
+        return f"sqrt(v0) and sqrt(theta) must be at least the vol bump {h_vol}"
+    return None
+
+
 def greeks_view(product, p, steps_per_year, n_paths, seed, ref_spot):
     g = autocallable_greeks(product, p, n_steps_for(product, steps_per_year), n_paths, seed,
                             ref_spot=ref_spot)
@@ -133,9 +142,15 @@ def main():  # pragma: no cover - exercised through streamlit's AppTest
         st.write("Bump-and-revalue with common random numbers. Delta and gamma bump spot by "
                  "2% of the fixing, vega shifts sqrt(v0) and sqrt(theta) by 0.01, rho bumps r "
                  "by 1e-3. Each SE comes from paired per-path differences.")
-        if st.button("compute Greeks"):
-            st.dataframe(st.cache_data(greeks_view)(product, p, spy, n_paths, int(seed), ref),
-                         hide_index=True)
+        problem = greeks_problem(p, ref)
+        if problem:
+            st.warning(f"Greeks not available: {problem}.")
+        elif st.button("compute Greeks"):
+            try:
+                st.dataframe(st.cache_data(greeks_view)(product, p, spy, n_paths, int(seed), ref),
+                             hide_index=True)
+            except ValueError as e:  # e.g. spot within the 2% bump of zero
+                st.error(f"Greeks not available: {e}")
 
     with tab_smile:
         df = st.cache_data(smile_view)(p)

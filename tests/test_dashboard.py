@@ -76,3 +76,17 @@ def test_app_runs_headless():
     at.button[0].click().run()
     assert not at.exception
     assert len(at.dataframe) == n_tables + 1
+
+
+def test_greeks_unavailable_state_warns_instead_of_crashing():
+    """Regression (stage 7 review): spot 1 with fixing 100 is within the 2% spot bump of zero.
+    The Greeks tab must explain that instead of raising from autocallable_greeks."""
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file(str(APP), default_timeout=180)
+    at.run()
+    at.sidebar.number_input[0].set_value(1.0).run()  # spot
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("Greeks not available" in w.value for w in at.warning)
+    assert D.greeks_problem(HestonParams(**dict(REF, S0=1.0)), 100.0) is not None
+    assert D.greeks_problem(HestonParams(**REF), 100.0) is None
