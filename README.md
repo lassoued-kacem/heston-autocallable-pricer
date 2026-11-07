@@ -66,10 +66,10 @@ Notional N, observation dates t_1 < ... < t_n = T, and levels relative to S0:
 `price_autocallable` returns the price and SE. It also reports the per-date call
 probabilities, P(never called), P(loss) and the expected life, each with its SE.
 
+<!-- numbers-from: scripts/price_autocallable.py -->
 Reference note: annual dates over 3 years, B = 100%, KI = 60%, c = 8%, under the reference
 Heston parameters (`scripts/price_autocallable.py`, 1,000,000 antithetic paths, seed 2026):
 
-<!-- numbers-from: scripts/price_autocallable.py -->
 | steps | price | SE |
 |---|---|---|
 | 12 | 99.4262 | 0.0151 |
@@ -116,10 +116,10 @@ against a COS oracle converged to < 1e-12.
   scaled condition number, any parameter at a bound, and the Feller ratio (reported, not
   imposed).
 
+<!-- numbers-from: scripts/calibrate.py -->
 Example (`scripts/calibrate.py`): the reference parameters priced by the COS oracle on
 4 maturities x 7 strikes, with N(0, 0.002^2) noise added to the IVs (seed 2026).
 
-<!-- numbers-from: scripts/calibrate.py -->
 | param | truth | fit | SE |
 |---|---|---|---|
 | v0 | 0.0400 | 0.0398 | 0.0004 |
@@ -128,7 +128,7 @@ Example (`scripts/calibrate.py`): the reference parameters priced by the COS ora
 | xi | 0.3000 | 0.2871 | 0.0165 |
 | rho | -0.7000 | -0.7160 | 0.0269 |
 
-* Every parameter is within 0.78 SE of the truth (largest |z| in the script output).
+* Every parameter is within 0.78 SE of the truth (max |z| in the script output).
 * IV RMSE is 0.00153 and the Feller ratio is 1.868.
 * The scaled condition number is 24.4.
 * kappa is the least identified parameter (SE 0.1951 on a fit of 1.9112). Its largest
@@ -155,9 +155,9 @@ The bumps are sized against the barrier discontinuities. An exact BS oracle puts
 finite-difference truncation bias below a quarter of the Greek's SE at 400k paths. Smaller
 spot bumps inflate the gamma variance, which grows like 1/h^3 for a digital-type jump.
 
+<!-- numbers-from: scripts/greeks.py scripts/price_autocallable.py -->
 Reference note (`scripts/greeks.py`, 48 steps, 1,000,000 antithetic paths, seed 2026):
 
-<!-- numbers-from: scripts/greeks.py -->
 | Greek | value | SE |
 |---|---|---|
 | price | 99.5159 | 0.0150 |
@@ -165,11 +165,11 @@ Reference note (`scripts/greeks.py`, 48 steps, 1,000,000 antithetic paths, seed 
 | gamma | -0.0160 | 0.0016 |
 | vega (per unit vol) | -49.9824 | 0.2765 |
 | rho (per unit rate) | -94.5984 | 1.0356 |
-<!-- end-numbers -->
 
 This run's 48-step price (99.5159) is not identical to the pricing script's 48-step price
 (99.5063). The pricing script draws its normals on a 192-step grid, so the two runs share
 only part of their random stream. Each SE is 0.0150.
+<!-- end-numbers -->
 
 How the Greeks are tested:
 * In the BS limit, against the same finite difference of the MVN oracle.
@@ -179,12 +179,12 @@ How the Greeks are tested:
 
 ## Convergence study (`scripts/convergence.py`)
 
+<!-- numbers-from: scripts/convergence.py -->
 ATM European call, T = 1, against the COS oracle. 400,000 antithetic paths, seed 2026.
 All step counts share one Brownian path, drawn on a 256-step grid.
 
 ![Euler bias vs time steps](docs/figures/bias_vs_steps.png)
 
-<!-- numbers-from: scripts/convergence.py -->
 | steps | stress: MC - COS | SE | reference: MC - COS | SE |
 |---|---|---|---|---|
 | 4 | +2.9462 | 0.0170 | +0.0868 | 0.0133 |
@@ -196,21 +196,29 @@ All step counts share one Brownian path, drawn on a 256-step grid.
 | 256 | +0.0333 | 0.0086 | +0.0085 | 0.0118 |
 
 **Stress set (Feller ratio 0.09).** The bias is resolved at every level. The paired change
-per halving of dt is:
+per halving of dt, D(n) = MC(n) - MC(2n), is:
 
 | step change | D(n) | SE(D) |
 |---|---|---|
+| 4 to 8 | +1.2608 | 0.0154 |
+| 8 to 16 | +0.8925 | 0.0107 |
 | 16 to 32 | +0.4643 | 0.0082 |
 | 32 to 64 | +0.1861 | 0.0069 |
 | 64 to 128 | +0.0833 | 0.0062 |
 | 128 to 256 | +0.0259 | 0.0056 |
 
-Each change is about half the previous one or less. Weak order 1 predicts a factor of 2.
+The first two changes are pre-asymptotic. From 16 steps on, each change is half the
+previous one or less, so the decay is currently faster than weak order 1 (which predicts
+a factor of 2). The slope -1 guide in the figure lies above the data there.
 
-**Reference set.** The bias is resolved only on coarse grids. The paired change is +0.0568
-+- 0.0082 from 4 to 8 steps and +0.0148 +- 0.0053 from 8 to 16. From 32 steps on, the
-changes are of the order of their SEs: +0.0019 +- 0.0022, -0.0008 +- 0.0015 and
--0.0021 +- 0.0010.
+**Reference set.** The bias is resolved only on coarse grids. The paired changes are:
+* +0.0568 +- 0.0082 from 4 to 8 steps;
+* +0.0148 +- 0.0053 from 8 to 16;
+* +0.0077 +- 0.0033 from 16 to 32.
+
+From 32 steps on, the changes are of the order of their SEs: +0.0019 +- 0.0022,
+-0.0008 +- 0.0015 and -0.0021 +- 0.0010. The last one, at about 2 SE with the "wrong"
+sign, is a fluctuation of this seed.
 <!-- end-numbers -->
 
 ![MC standard error vs paths](docs/figures/se_vs_paths.png)
@@ -223,7 +231,10 @@ changes are of the order of their SEs: +0.0019 +- 0.0022, -0.0008 +- 0.0015 and
 | 200,000 | 0.01665 | 0.02595 | 2.43 |
 | 800,000 | 0.00833 | 0.01297 | 2.42 |
 
-The log-log slope of the antithetic SE against path count is -0.502 (theory -0.5).
+The log-log slope of the antithetic SE against path count is -0.502 (theory -0.5). Since
+SE = s / sqrt(m), a slope near -0.5 holds almost by construction. The evidence that the
+SEs are right comes from the tests that compare reported SEs with the spread over many
+seeds (test_mc for prices, test_greeks for Greeks).
 Antithetic pairs cut the variance by a factor of 2.42 to 2.43 at equal path counts. The
 antithetic SE is computed from pair means.
 <!-- end-numbers -->
