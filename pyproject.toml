@@ -1,0 +1,15 @@
+[project]
+name = "hestonlib"
+version = "0.0.0"
+description = "Heston pricing, calibration and risk for an autocallable structured product"
+requires-python = ">=3.12"
+dependencies = ["numpy", "scipy", "matplotlib"]
+
+[project.optional-dependencies]
+app = ["streamlit", "pandas"]
+test = ["pytest"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "."]
+testpaths = ["tests"]
+addopts = "-ra"
