@@ -93,6 +93,22 @@ def test_one_step_correlation_equals_rho():
         assert abs(c - rho) < 4 * (1 - rho**2) / np.sqrt(100_000), (rho, c)
 
 
+def test_antithetic_pairs_negate_both_drivers(ref_params):
+    """After one step, ln S and v are affine in (Z_v, Z_perp) around a common deterministic
+    centre. Pair i, i + n/2 negates both drivers, so the pair sums equal twice the centre:
+    ln S_i + ln S_{i+n/2} = 2 (ln S0 + (r - q - v0/2) dt), v_i + v_{i+n/2} = 2 (v0 + kappa (theta - v0) dt).
+    Negating only one driver would break the ln S identity (no distributional test can see
+    that, since each half is still a valid Heston sample). Tolerance 1e-12 (rounding)."""
+    p, dt, n = ref_params, 0.01, 1000
+    P = simulate(p, dt, 1, n, seed=4)
+    lnS, v = np.log(P.S[:, 0]), P.v[:, 0]
+    h = n // 2
+    centre_s = np.log(p.S0) + (p.r - p.q - 0.5 * p.v0) * dt
+    centre_v = p.v0 + p.kappa * (p.theta - p.v0) * dt
+    assert np.max(np.abs(lnS[:h] + lnS[h:] - 2 * centre_s)) < 1e-12
+    assert np.max(np.abs(v[:h] + v[h:] - 2 * centre_v)) < 1e-12
+
+
 @pytest.mark.parametrize("d", [REF, STRESS], ids=["ref", "stress"])
 def test_discounted_asset_is_exact_martingale(d):
     """E[e^{-(r-q) t} S_t] = S0 holds exactly for the discrete log-Euler scheme (see the
@@ -147,8 +163,9 @@ def test_euler_bias_shrinks_with_step_size():
     Brownian path (rng_steps = 128), so the change in price between n and 2n,
     D(n) = MC(n) - MC(2n), is a paired difference with a small SE.
     (1) The bias at n = 8 is resolved: MC(8) - COS > 4 SE.
-    (2) It shrinks at every halving of dt: D(n) > 4 SE(D(n)) for n = 8, 16, 32, i.e. the
-        error decreases monotonically (the bias is positive here, as in (1)).
+    (2) The price falls at every halving of dt: D(n) > 4 SE(D(n)) for n = 8, 16, 32. On its
+        own this shows MC(n) decreasing, not the error; with (1) and (3) (positive bias at
+        n = 8, small error at n = 128) it shows the error shrinking.
     (3) The error at n = 128 is smaller than at n = 8 by more than 4 combined SE, and
         consistent with weak order 1: below 8/128 of the n = 8 error plus 4 SE."""
     p = HestonParams(**STRESS)
