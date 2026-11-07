@@ -3,7 +3,7 @@
 Pricing and risk for an autocallable structured product under the Heston stochastic-volatility
 model, in pure NumPy/SciPy (vectorized; no C++, no Numba).
 
-> Status: stage 2 of 7 (semi-analytic European pricer, Monte Carlo). Later sections are added as the
+> Status: stage 3 of 7 (semi-analytic European pricer, Monte Carlo, autocallable). Later sections are added as the
 > stages land.
 
 ## Model
@@ -51,6 +51,47 @@ The Euler bias is tested in two ways. On coupled levels with Feller strongly vio
 price falls by a statistically significant amount at every halving of dt. At the reference
 parameters, the 64-step price matches the COS oracle within 4 SE plus a bias allowance
 |MC(32) - MC(64)| + 4 SE (the weak-order-1 estimate of the remaining bias).
+
+## Autocallable (`hestonlib.autocall`)
+
+Notional N, observation dates t_1 < ... < t_n = T, and levels relative to S0:
+
+* **Autocall:** at each t_i, if S_{t_i} >= B S0, the note pays N (1 + c i) at t_i and
+  ends. The maturity date is an autocall date.
+* **Redemption if never called (European knock-in, observed at T only):** N if
+  S_T >= KI S0, and N S_T / S0 otherwise.
+* **Discounting:** every cashflow is discounted at exp(-r t) for its own date.
+
+`price_autocallable` returns the price and SE. It also reports the per-date call
+probabilities, P(never called), P(loss) and the expected life, each with its SE.
+
+Reference note: annual dates over 3 years, B = 100%, KI = 60%, c = 8%, under the reference
+Heston parameters (`scripts/price_autocallable.py`, 1,000,000 antithetic paths, seed 2026):
+
+| steps | price | SE |
+|---|---|---|
+| 12 | 99.4262 | 0.0151 |
+| 48 | 99.5063 | 0.0150 |
+| 192 | 99.5144 | 0.0150 |
+
+On one shared Brownian path:
+* MC(12) - MC(48) = -0.0801 +- 0.0088.
+* MC(48) - MC(192) = -0.0081 +- 0.0059.
+
+At 192 steps:
+* P(called at year 1, 2, 3) = 0.5799, 0.1200, 0.0561.
+* P(never called) = 0.2439.
+* P(loss) = 0.0629.
+* Expected life = 1.7201 years.
+
+The probability SEs are 0.0002 to 0.0004.
+
+How the pricer is validated:
+* **One date:** the note is a bond plus a digital minus a put, priced by the COS oracle.
+* **Several dates:** in the BS limit, against an exact discrete-monitoring price built from
+  multivariate normal CDFs (Girsanov for the knock-in leg). That oracle is itself checked
+  against quadrature and the trivariate orthant formula.
+* **Exact payoff limits:** barrier 0, infinite barriers, KI 0 and KI infinite.
 
 ## How correctness is established
 
