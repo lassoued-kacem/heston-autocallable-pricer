@@ -13,8 +13,8 @@ reported separately, together with the number of model IVs that are not resolvab
 
 Identifiability: with J the residual Jacobian at the solution and s^2 = RSS / (m - 5) the
 residual variance, Cov(theta_hat) ~ s^2 (J^T J)^{-1} when the IV errors are iid. The standard
-errors, the parameter correlation matrix and the condition number of J (scaled by the
-parameter magnitudes) are reported, as is the Feller ratio 2 kappa theta / xi^2 (the
+errors, the parameter correlation matrix and the condition number of J (columns scaled by the
+parameter magnitudes, floored at 1% of the bound range) are reported, as is the Feller ratio 2 kappa theta / xi^2 (the
 calibration does not enforce Feller: it is reported, not imposed).
 """
 
@@ -109,7 +109,10 @@ def calibrate(surface: Surface, x0=(0.06, 1.0, 0.06, 0.5, -0.4), xtol=1e-12, fto
     se = np.sqrt(np.clip(np.diag(cov), 0, None))
     d = np.sqrt(np.clip(np.diag(JtJ_inv), 1e-300, None))
     corr = JtJ_inv / np.outer(d, d)
-    cond = float(np.linalg.cond(J * np.abs(x)[None, :]))
+    # Scale columns by the parameter size, floored at 1% of the box so that a parameter
+    # near 0 (e.g. rho) does not make the scaled Jacobian degenerate.
+    scale = np.maximum(np.abs(x), 0.01 * (UPPER - LOWER))
+    cond = float(np.linalg.cond(J * scale[None, :]))
 
     p = _params(x, surface.S0, surface.r, surface.q)
     # Model IVs use the pricer's error bound: a model price whose time value is within its

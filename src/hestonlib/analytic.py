@@ -70,7 +70,8 @@ _QUAD_KW = dict(epsabs=1e-12, epsrel=1e-10)
 def heston_call(K, T: float, p: HestonParams, return_error: bool = False):
     """Heston European call price(s) by the Lewis integral. K may be scalar or 1-D array.
 
-    With ``return_error``, also returns an absolute error bound in price units: the
+    With ``return_error``, also returns an absolute error estimate in price units (QUADPACK's
+    estimate, not a rigorous bound; the tests show it covers the true error): the
     quadrature's own error estimate scaled by e^{-rT} sqrt(F K) / pi, plus a rounding term
     16 eps e^{-rT} max(F, K) for the cancellation F - sqrt(F K)/pi * integral. For a vector
     of strikes ``quad_vec`` reports one max-norm estimate, which is applied to every strike.
