@@ -261,7 +261,8 @@ Final re-review: 0 unresolved.
 - `scripts/greeks.py`, whose output the README quotes.
 
 ### Tests
-96 passing in total (7 in `test_greeks.py`); full suite about 68 s.
+96 passing in total (6 in `test_greeks.py`; an earlier version of this entry said 7); full
+suite about 68 s.
 
 ### Tolerances and why
 | Check | Tolerance | Justification |
@@ -297,6 +298,61 @@ itself in the re-review.
    cites the price-level shrinkage tests.
 4. **Nits:** shadowed name `q`, implicit antithetic flag, an overstated Genz error, the
    sign of the autocall jump, and the 4/h^2 Genz weight in gamma. All fixed.
+
+Final re-review: 0 unresolved.
+
+## Stage 6: convergence study and README integrity (merged)
+
+### What was built
+- `scripts/convergence.py`:
+  - Euler bias of an ATM call against COS, for the stress and reference sets, on coupled
+    levels from 4 to 256 steps (one Brownian path), with paired changes D(n) and their SEs;
+  - the SE against path count, antithetic vs plain;
+  - two figures in `docs/figures/` (palette validated: blue and orange, all-pairs CVD
+    check passed). `--figures-dir` redirects them.
+- `scripts/check_readme.py`:
+  - Every decimal or thousands-separated number inside README blocks marked
+    `<!-- numbers-from: scripts/X.py [...] -->` must appear, sign included, in a fresh run
+    of the named script(s).
+  - Figures are rendered to a temporary directory and compared byte for byte with the
+    committed ones; `--strict-figures` makes a mismatch fail.
+  - Its limits are documented: set membership, so a number in the wrong row can pass;
+    integers and qualitative wording are not checked.
+- `scripts/calibrate.py` prints max |z|.
+- README: a convergence section. Every script-derived block, including its configuration
+  lines, is now marked.
+
+### Tests
+100 passing in total (4 in `test_check_readme.py`, which test the checker's parsing);
+full suite about 68 s. The checker itself runs the scripts (about 90 s), so it is not in
+the Stop hook. It was run with `--strict-figures` before merging and passed.
+
+### Results (from the script output)
+- **Stress set:** the error falls from +2.9462 (4 steps) to +0.0333 (256 steps). The paired
+  change halves from 16 to 32 steps, as order 1 predicts, and falls by more than half per
+  halving from 32 steps on.
+- **Reference set:** the bias is resolved only up to about 32 steps.
+- **SE:** the slope against paths is -0.502 (near -1/2 by construction). Antithetic
+  sampling cuts the variance by 2.42 to 2.43 times at equal path counts.
+
+### Reviewer findings and resolutions
+1. **Minor:** script-derived numbers (the 48-step price comparison and the configuration
+   lines) sat outside the markers. Fixed: they are marked, and blocks may name several
+   scripts.
+2. **Minor, introduced by fix 1:** the README said every stress change from 16 steps on was
+   half the previous one or less, but 16-to-32 is 0.52. Fixed: the wording follows the
+   numbers.
+3. **Nits:**
+   - all D rows are now listed;
+   - the stress decay is called pre-asymptotic, then faster than order 1;
+   - the -0.0021 reference change is "consistent with noise" rather than asserted to be a
+     fluctuation;
+   - the SE slope is said to hold by construction;
+   - the checker no longer rewrites committed figures, and gained `--strict-figures`, a
+     separate stale-figure message and a missing-figure failure;
+   - the Greeks table is checked against greeks.py alone;
+   - max |z| is printed;
+   - one long line is rewrapped.
 
 Final re-review: 0 unresolved.
 
