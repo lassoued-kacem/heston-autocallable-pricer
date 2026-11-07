@@ -67,8 +67,16 @@ def heston_cf(u, T: float, p: HestonParams):
 _QUAD_KW = dict(epsabs=1e-12, epsrel=1e-10)
 
 
-def heston_call(K, T: float, p: HestonParams):
-    """Heston European call price(s) by the Lewis integral. K may be scalar or 1-D array."""
+def heston_call(K, T: float, p: HestonParams, return_error: bool = False):
+    """Heston European call price(s) by the Lewis integral. K may be scalar or 1-D array.
+
+    With ``return_error``, also returns an absolute error bound in price units: the
+    quadrature's own error estimate scaled by e^{-rT} sqrt(F K) / pi, plus a rounding term
+    16 eps e^{-rT} max(F, K) for the cancellation F - sqrt(F K)/pi * integral. For a vector
+    of strikes ``quad_vec`` reports one max-norm estimate, which is applied to every strike.
+    Prices can be slightly negative (about -1e-10) at very short T deep out of the money;
+    they lie within this bound, so callers should treat |price| <= error as zero time value.
+    """
     if T <= 0:
         raise ValueError("T must be positive")
     K_arr = np.asarray(K, dtype=float)
@@ -82,7 +90,7 @@ def heston_call(K, T: float, p: HestonParams):
             z = heston_cf(u - 0.5j, T, p)
             return float(np.real(np.exp(1j * u * xs) * z)) / (u * u + 0.25)
 
-        integral, _ = quad(f, 0.0, np.inf, limit=400, **_QUAD_KW)
+        integral, abserr = quad(f, 0.0, np.inf, limit=400, **_QUAD_KW)
     else:
         xv = x.ravel()
 
@@ -90,16 +98,28 @@ def heston_call(K, T: float, p: HestonParams):
             z = heston_cf(u - 0.5j, T, p)
             return np.real(np.exp(1j * u * xv) * z) / (u * u + 0.25)
 
-        integral, _ = quad_vec(f, 0.0, np.inf, limit=400, **_QUAD_KW)
+        integral, abserr = quad_vec(f, 0.0, np.inf, limit=400, norm="max", **_QUAD_KW)
         integral = integral.reshape(K_arr.shape)
 
-    return np.exp(-p.r * T) * (F - np.sqrt(F * K_arr) / np.pi * integral)
+    disc = np.exp(-p.r * T)
+    price = disc * (F - np.sqrt(F * K_arr) / np.pi * integral)
+    if not return_error:
+        return price
+    eps = np.finfo(float).eps
+    err = disc * (np.sqrt(F * K_arr) / np.pi * abserr + 16 * eps * np.maximum(F, K_arr))
+    return price, err
 
 
-def heston_put(K, T: float, p: HestonParams):
-    """Heston European put via put-call parity."""
+def heston_put(K, T: float, p: HestonParams, return_error: bool = False):
+    """Heston European put via put-call parity (same error bound as the call, plus the
+    rounding of the parity terms)."""
     K_arr = np.asarray(K, dtype=float)
-    return heston_call(K_arr, T, p) - p.S0 * np.exp(-p.q * T) + K_arr * np.exp(-p.r * T)
+    call, err = heston_call(K_arr, T, p, return_error=True)
+    fs, dk = p.S0 * np.exp(-p.q * T), K_arr * np.exp(-p.r * T)
+    put = call - fs + dk
+    if not return_error:
+        return put
+    return put, err + 4 * np.finfo(float).eps * np.maximum(fs, dk)
 
 
 def heston_price(K, T: float, p: HestonParams, kind: str = "call"):
