@@ -36,17 +36,27 @@ from hestonlib.params import HestonParams
 
 def heston_cf(u, T: float, p: HestonParams):
     """E[exp(i u ln(S_T / F_T))], vectorized over complex u."""
+    # Numerically stable evaluation (no cancellation as xi -> 0). With w = u^2 + i u,
+    # d^2 = beta^2 + xi^2 w, so beta - d = -xi^2 w / (beta + d), and therefore
+    #   r_-  = -w / (beta + d),        g = -xi^2 w / (beta + d)^2.
+    # The log term is ln((1 - g e)/(1 - g)) = ln(1 + y) with y = g (1 - e)/(1 - g) = O(xi^2).
+    # It is evaluated as 2 artanh(y / (2 + y)), which is accurate for small complex y
+    # (numpy's complex log1p is not). Re(beta + d) > 0 on the integration paths.
     u = np.asarray(u, dtype=complex)
     iu = 1j * u
     xi2 = p.xi * p.xi
-    alpha = -0.5 * (u * u + iu)
+    w = u * u + iu  # = -2 alpha
     beta = p.kappa - p.rho * p.xi * iu
-    d = np.sqrt(beta * beta - 2.0 * xi2 * alpha)  # 4 alpha gamma = 2 xi^2 alpha
-    r_minus = (beta - d) / xi2
-    g = (beta - d) / (beta + d)
+    d = np.sqrt(beta * beta + xi2 * w)
+    bpd = beta + d
+    r_minus = -w / bpd
+    g = -xi2 * w / (bpd * bpd)
     edt = np.exp(-d * T)
-    D = r_minus * (1.0 - edt) / (1.0 - g * edt)
-    C = p.kappa * (r_minus * T - (2.0 / xi2) * np.log((1.0 - g * edt) / (1.0 - g)))
+    one_minus_edt = -np.expm1(-d * T)
+    D = r_minus * one_minus_edt / (1.0 - g * edt)
+    y = g * one_minus_edt / (1.0 - g)
+    log_term = 2.0 * np.arctanh(y / (2.0 + y))
+    C = p.kappa * (r_minus * T - (2.0 / xi2) * log_term)
     return np.exp(C * p.theta + D * p.v0)
 
 

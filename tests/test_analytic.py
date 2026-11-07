@@ -80,11 +80,21 @@ def _bs_gap(xi, rho):
 def test_bs_limit_first_order_in_xi():
     """v0 = theta, xi -> 0: Heston -> BS(sigma = sqrt(v0)). The leading correction of the
     vol-of-vol expansion is linear in rho*xi, so each decade of xi should cut the gap ~10x.
-    Asserted: ratio > 8 per decade (allowing for the O(xi^2) term), and the gap is < 5e-3 at
-    xi = 1e-3."""
+    Asserted: ratio > 8 per decade (allowing for the O(xi^2) term) for xi from 1e-1 to 1e-3."""
     g = [_bs_gap(x, -0.7) for x in (1e-1, 1e-2, 1e-3)]
     assert g[0] / g[1] > 8 and g[1] / g[2] > 8, g
-    assert g[2] < 5e-3
+
+
+def test_bs_limit_survives_tiny_xi():
+    """Regression for a catastrophic cancellation in (beta - d)/xi^2 that gave price errors of
+    ~0.4 at xi = 1e-8. The true gap is O(xi), so the linear rate must continue down to
+    xi = 1e-8 (ratio > 8 per two decades is very loose: theory gives 100), and at xi = 1e-8
+    the gap must be < 1e-5, far above the O(1e-8) theory value and far below the bug's 0.4."""
+    g = [_bs_gap(x, -0.7) for x in (1e-4, 1e-6, 1e-8)]
+    assert g[0] / g[1] > 8 and g[1] / g[2] > 8, g
+    assert g[2] < 1e-5, g
+    g0 = [_bs_gap(x, 0.0) for x in (1e-6, 1e-8)]
+    assert max(g0) < 1e-5, g0
 
 
 def test_bs_limit_second_order_when_rho_zero():
