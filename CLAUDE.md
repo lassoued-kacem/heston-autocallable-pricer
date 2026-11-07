@@ -59,5 +59,5 @@ Reference parameters: S0=100, r=0.03, q=0.0, v0=0.04, kappa=2.0, theta=0.04, xi=
 - Reviewer-found bugs get their own `fix:` commit on the stage branch.
 - Never rewrite or backdate history, never force-push, never commit failing
   tests to main. No remote exists, so no push.
-- Keep the Co-Authored-By trailer on every commit.
+- Do not add a Co-Authored-By trailer to commits.
 - Keep the README current as part of the stage that changes behavior.
