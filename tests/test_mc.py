@@ -137,6 +137,8 @@ def test_same_seed_reproduces_and_obs_grid_is_checked(ref_params):
         simulate(ref_params, 1.0, 8, 1000, obs_times=[0.3])  # 0.3 is not a multiple of 1/8
     with pytest.raises(ValueError):
         simulate(ref_params, 1.0, 8, 1001)  # antithetic needs an even count
+    with pytest.raises(ValueError):
+        simulate(ref_params, 1.0, 8, 4, obs_times=[1e-10, 1.0])  # rounds to grid index 0
 
 
 # --------------------------------------------------------------------------- Euler bias

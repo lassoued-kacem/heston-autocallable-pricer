@@ -93,8 +93,8 @@ def _obs_indices(obs_times, T: float, n_steps: int) -> np.ndarray:
     if np.any(t <= 0) or np.any(t > T * (1 + 1e-12)) or np.any(np.diff(t) <= 0):
         raise ValueError("observation times must be increasing and lie in (0, T]")
     j = np.rint(t * n_steps / T).astype(int)
-    if np.any(np.abs(j * T / n_steps - t) > 1e-9 * max(1.0, T)):
-        raise ValueError("observation times must lie on the simulation grid")
+    if np.any(j < 1) or np.any(np.abs(j * T / n_steps - t) > 1e-9 * max(1.0, T)):
+        raise ValueError("observation times must lie on the simulation grid, after t = 0")
     return j
 
 
@@ -138,6 +138,8 @@ def simulate(
             S_out[:, col] = np.exp(lnS)
             v_out[:, col] = v
             col += 1
+    if col != len(obs_idx):  # every output column must have been written
+        raise RuntimeError("internal error: not all observation times were recorded")
     return HestonPaths(times=times, S=S_out, v=v_out, antithetic=antithetic)
 
 
