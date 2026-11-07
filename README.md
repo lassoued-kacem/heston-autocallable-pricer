@@ -3,8 +3,8 @@
 Pricing and risk for an autocallable structured product under the Heston stochastic-volatility
 model, in pure NumPy/SciPy (vectorized; no C++, no Numba).
 
-> Status: stage 5 of 7 (semi-analytic European pricer, Monte Carlo, autocallable,
-> implied vols and calibration, Greeks). Later sections are added as the
+> Status: stage 6 of 7 (semi-analytic European pricer, Monte Carlo, autocallable,
+> implied vols and calibration, Greeks, convergence study). Later sections are added as the
 > stages land.
 
 ## Model
@@ -69,6 +69,7 @@ probabilities, P(never called), P(loss) and the expected life, each with its SE.
 Reference note: annual dates over 3 years, B = 100%, KI = 60%, c = 8%, under the reference
 Heston parameters (`scripts/price_autocallable.py`, 1,000,000 antithetic paths, seed 2026):
 
+<!-- numbers-from: scripts/price_autocallable.py -->
 | steps | price | SE |
 |---|---|---|
 | 12 | 99.4262 | 0.0151 |
@@ -86,6 +87,7 @@ At 192 steps:
 * Expected life = 1.7201 +- 0.0006 years.
 
 The probability SEs are 0.0002 to 0.0004.
+<!-- end-numbers -->
 
 How the pricer is validated:
 * **One date:** the note is a bond plus a digital minus a put, priced by the COS oracle.
@@ -117,6 +119,7 @@ against a COS oracle converged to < 1e-12.
 Example (`scripts/calibrate.py`): the reference parameters priced by the COS oracle on
 4 maturities x 7 strikes, with N(0, 0.002^2) noise added to the IVs (seed 2026).
 
+<!-- numbers-from: scripts/calibrate.py -->
 | param | truth | fit | SE |
 |---|---|---|---|
 | v0 | 0.0400 | 0.0398 | 0.0004 |
@@ -125,11 +128,12 @@ Example (`scripts/calibrate.py`): the reference parameters priced by the COS ora
 | xi | 0.3000 | 0.2871 | 0.0165 |
 | rho | -0.7000 | -0.7160 | 0.0269 |
 
-* Every parameter is within 0.8 SE of the truth.
+* Every parameter is within 0.78 SE of the truth (largest |z| in the script output).
 * IV RMSE is 0.00153 and the Feller ratio is 1.868.
 * The scaled condition number is 24.4.
-* kappa is the least identified parameter (relative SE about 10%). Its largest
-  correlations are with xi (0.59), and xi in turn correlates with rho (0.78).
+* kappa is the least identified parameter (SE 0.1951 on a fit of 1.9112). Its largest
+  correlation is with xi (0.59), and xi in turn correlates with rho (0.78).
+<!-- end-numbers -->
 
 Without noise, the same fit recovers both the reference set and a Feller-violating stress
 set to within a bound derived from sigma_min of the Jacobian.
@@ -153,6 +157,7 @@ spot bumps inflate the gamma variance, which grows like 1/h^3 for a digital-type
 
 Reference note (`scripts/greeks.py`, 48 steps, 1,000,000 antithetic paths, seed 2026):
 
+<!-- numbers-from: scripts/greeks.py -->
 | Greek | value | SE |
 |---|---|---|
 | price | 99.5159 | 0.0150 |
@@ -160,6 +165,7 @@ Reference note (`scripts/greeks.py`, 48 steps, 1,000,000 antithetic paths, seed 
 | gamma | -0.0160 | 0.0016 |
 | vega (per unit vol) | -49.9824 | 0.2765 |
 | rho (per unit rate) | -94.5984 | 1.0356 |
+<!-- end-numbers -->
 
 This run's 48-step price (99.5159) is not identical to the pricing script's 48-step price
 (99.5063). The pricing script draws its normals on a 192-step grid, so the two runs share
@@ -170,6 +176,60 @@ How the Greeks are tested:
 * For one Heston date, against the same finite difference of the COS replication, with an
   Euler bias allowance and a power cap.
 * Over 200 seeds, the reported SEs match the observed spread.
+
+## Convergence study (`scripts/convergence.py`)
+
+ATM European call, T = 1, against the COS oracle. 400,000 antithetic paths, seed 2026.
+All step counts share one Brownian path, drawn on a 256-step grid.
+
+![Euler bias vs time steps](docs/figures/bias_vs_steps.png)
+
+<!-- numbers-from: scripts/convergence.py -->
+| steps | stress: MC - COS | SE | reference: MC - COS | SE |
+|---|---|---|---|---|
+| 4 | +2.9462 | 0.0170 | +0.0868 | 0.0133 |
+| 8 | +1.6854 | 0.0123 | +0.0299 | 0.0125 |
+| 16 | +0.7929 | 0.0099 | +0.0152 | 0.0121 |
+| 32 | +0.3286 | 0.0091 | +0.0075 | 0.0119 |
+| 64 | +0.1426 | 0.0088 | +0.0056 | 0.0118 |
+| 128 | +0.0593 | 0.0087 | +0.0064 | 0.0118 |
+| 256 | +0.0333 | 0.0086 | +0.0085 | 0.0118 |
+
+**Stress set (Feller ratio 0.09).** The bias is resolved at every level. The paired change
+per halving of dt is:
+
+| step change | D(n) | SE(D) |
+|---|---|---|
+| 16 to 32 | +0.4643 | 0.0082 |
+| 32 to 64 | +0.1861 | 0.0069 |
+| 64 to 128 | +0.0833 | 0.0062 |
+| 128 to 256 | +0.0259 | 0.0056 |
+
+Each change is about half the previous one or less. Weak order 1 predicts a factor of 2.
+
+**Reference set.** The bias is resolved only on coarse grids. The paired change is +0.0568
++- 0.0082 from 4 to 8 steps and +0.0148 +- 0.0053 from 8 to 16. From 32 steps on, the
+changes are of the order of their SEs: +0.0019 +- 0.0022, -0.0008 +- 0.0015 and
+-0.0021 +- 0.0010.
+<!-- end-numbers -->
+
+![MC standard error vs paths](docs/figures/se_vs_paths.png)
+
+<!-- numbers-from: scripts/convergence.py -->
+| paths | SE antithetic | SE plain | variance ratio plain/anti |
+|---|---|---|---|
+| 12,500 | 0.06712 | 0.10461 | 2.43 |
+| 50,000 | 0.03333 | 0.05193 | 2.43 |
+| 200,000 | 0.01665 | 0.02595 | 2.43 |
+| 800,000 | 0.00833 | 0.01297 | 2.42 |
+
+The log-log slope of the antithetic SE against path count is -0.502 (theory -0.5).
+Antithetic pairs cut the variance by a factor of 2.42 to 2.43 at equal path counts. The
+antithetic SE is computed from pair means.
+<!-- end-numbers -->
+
+Check every number in the marked README blocks against fresh script output with
+`.venv/bin/python scripts/check_readme.py`.
 
 ## How correctness is established
 
