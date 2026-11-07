@@ -48,7 +48,7 @@ def main(argv=None):
     if not blocks:
         print("no marked blocks found")
         return 1
-    outputs, failed = {}, False
+    outputs, failed, stale = {}, False, False
     with tempfile.TemporaryDirectory() as tmp:
         for scripts, body in blocks:
             have = set()
@@ -67,12 +67,17 @@ def main(argv=None):
             failed |= bool(missing)
         for name in FIGURES:
             fresh, committed = Path(tmp) / name, ROOT / "docs/figures" / name
-            if fresh.exists():
-                same = committed.exists() and fresh.read_bytes() == committed.read_bytes()
-                print(f"  figure {name}: {'identical to committed' if same else 'DIFFERS from committed'}")
-                failed |= strict and not same
+            if not fresh.exists():
+                print(f"  figure {name}: not rendered (no block names convergence.py)")
+                stale |= strict
+                continue
+            same = committed.exists() and fresh.read_bytes() == committed.read_bytes()
+            print(f"  figure {name}: {'identical to committed' if same else 'DIFFERS from committed'}")
+            stale |= strict and not same
     print("README numbers match script output" if not failed else "README has numbers not in script output")
-    return 1 if failed else 0
+    if stale:
+        print("committed figures are stale or missing (--strict-figures)")
+    return 1 if failed or stale else 0
 
 
 if __name__ == "__main__":

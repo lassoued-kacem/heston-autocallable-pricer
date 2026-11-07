@@ -220,8 +220,8 @@ figure lies above the data there.
 * +0.0077 +- 0.0033 from 16 to 32.
 
 From 32 steps on, the changes are of the order of their SEs: +0.0019 +- 0.0022,
--0.0008 +- 0.0015 and -0.0021 +- 0.0010. The last one has the "wrong" sign for a monotone bias, but at about 2 SE
-it is consistent with noise.
+-0.0008 +- 0.0015 and -0.0021 +- 0.0010. The last one has the "wrong" sign for a monotone
+bias, but at about 2 SE it is consistent with noise.
 <!-- end-numbers -->
 
 ![MC standard error vs paths](docs/figures/se_vs_paths.png)
