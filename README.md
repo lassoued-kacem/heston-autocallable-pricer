@@ -96,9 +96,10 @@ How the pricer is validated:
 
 ## Implied volatility and calibration
 
-**Pricer error bound.** `heston_call(..., return_error=True)` returns the Lewis quadrature
-error bound in price units, plus a rounding term. In the tests, the true error against COS
-is at most 3% of the bound.
+**Pricer error estimate.** `heston_call(..., return_error=True)` returns the Lewis
+quadrature's error estimate (QUADPACK's estimate, not a rigorous bound) in price units,
+plus a rounding term. `tests/test_implied_vol.py` checks that it covers the true error
+against a COS oracle converged to < 1e-12.
 
 **Guarded implied volatility** (`hestonlib.implied_vol`):
 * `brentq` runs inside checked no-arbitrage bounds.
