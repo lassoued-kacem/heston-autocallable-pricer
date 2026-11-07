@@ -175,3 +175,23 @@ def test_bs_autocallable_ki_above_barrier_one_date():
     d2 = d1 - s * np.sqrt(T)
     expect = N * (1 + c) * np.exp(-r * T) * norm.cdf(d2) + N * np.exp(-q * T) * norm.cdf(-d1)
     assert abs(R.bs_autocallable(S0, r, q, s, [T], B, KI, c, N) - expect) < 1e-12
+
+
+def test_bs_autocallable_with_moved_spot_one_date():
+    """Fixing S_ref = 100, spot S0 = 93: one date pays N (1+c) if S_T >= B S_ref, N if
+    KI S_ref <= S_T < B S_ref, else N S_T / S_ref. With absolute levels H = B S_ref,
+    L = KI S_ref: N (1+c) e^{-rT} N(d2(H)) + N e^{-rT} [N(-d2(H)) - N(-d2(L))]
+    + (N / S_ref) S0 e^{-qT} N(-d1(L)), d's at spot S0. Tolerance 1e-12."""
+    _, r, q, s, B, KI, c = AC.values()
+    S0, S_ref, T, N = 93.0, 100.0, 1.5, 100.0
+
+    def d12(K):
+        d1 = (np.log(S0 / K) + (r - q + 0.5 * s * s) * T) / (s * np.sqrt(T))
+        return d1, d1 - s * np.sqrt(T)
+
+    _, d2h = d12(B * S_ref)
+    d1l, d2l = d12(KI * S_ref)
+    expect = N * (1 + c) * np.exp(-r * T) * norm.cdf(d2h) + N * np.exp(-r * T) * (
+        norm.cdf(-d2h) - norm.cdf(-d2l)) + (N / S_ref) * S0 * np.exp(-q * T) * norm.cdf(-d1l)
+    got = R.bs_autocallable(S0, r, q, s, [T], B, KI, c, N, S_ref=S_ref)
+    assert abs(got - expect) < 1e-12
