@@ -11,6 +11,8 @@ def bs_price(S0, K, T, r, q, sigma, kind: str = "call"):
     S0 = np.asarray(S0, dtype=float)
     K = np.asarray(K, dtype=float)
     sigma = np.asarray(sigma, dtype=float)
+    if T < 0 or np.any(sigma < 0) or np.any(S0 <= 0) or np.any(K <= 0):
+        raise ValueError("need T >= 0, sigma >= 0, S0 > 0, K > 0")
     fwd_disc_S = S0 * np.exp(-q * T)
     disc_K = K * np.exp(-r * T)
     sd = sigma * np.sqrt(T)

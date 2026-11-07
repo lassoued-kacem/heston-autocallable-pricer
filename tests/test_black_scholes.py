@@ -28,3 +28,11 @@ def test_zero_vol_is_discounted_intrinsic():
 def test_bad_kind_raises():
     with pytest.raises(ValueError):
         bs_price(100.0, 100.0, 1.0, 0.0, 0.0, 0.2, "digital")
+
+
+@pytest.mark.parametrize("bad", [dict(T=-1.0), dict(sigma=-0.1), dict(K=0.0)])
+def test_invalid_inputs_raise(bad):
+    """Negative T or sigma used to fall through to intrinsic value silently."""
+    kw = dict(S0=100.0, K=100.0, T=1.0, r=0.0, q=0.0, sigma=0.2) | bad
+    with pytest.raises(ValueError):
+        bs_price(**kw)
