@@ -10,14 +10,19 @@ from scipy.stats import chi2
 
 import reference as R
 from conftest import REF, STRESS, model_args
+from hestonlib.analytic import heston_call
 from hestonlib.calibration import LOWER, NAMES, UPPER, Surface, calibrate
+from hestonlib.params import HestonParams
 
 MATS = np.array([0.25, 0.5, 1.0, 2.0])
 STRIKES = np.array([80.0, 90.0, 95.0, 100.0, 105.0, 110.0, 120.0])
 
 
-def _surface(d, iv_noise=0.0, seed=0):
-    prices = np.array([R.cos_call(d["S0"], STRIKES, T, *model_args(d)) for T in MATS])
+def _surface(d, iv_noise=0.0, seed=0, tight=False):
+    """Market calls from the COS oracle. ``tight`` uses N = 2^17, L = 192, which
+    test_implied_vol shows converged to < 1e-12 by doubling."""
+    kw = dict(N=2**17, L=192.0, adaptive=False) if tight else {}
+    prices = np.array([R.cos_call(d["S0"], STRIKES, T, *model_args(d), **kw) for T in MATS])
     s = Surface(d["S0"], d["r"], d["q"], MATS, STRIKES, prices)
     if iv_noise:
         iv = s.ivs() + iv_noise * np.random.default_rng(seed).standard_normal(prices.shape)
@@ -37,15 +42,18 @@ def test_bounds_contain_the_test_parameter_sets():
 
 @pytest.mark.parametrize("d", [REF, STRESS], ids=["ref", "stress"])
 def test_noise_free_recovery(d):
-    """Exact data up to the COS and Lewis errors, each <= about 1.2e-9 in price
-    (test_implied_vol), so the data error per residual is |dr_j| <= 3e-9 / vega_j. To first
-    order, |x_hat - x_true|_2 <= (|dr|_2 + |r_final|_2) / sigma_min(J). Tolerance: twice
-    that (factor 2 for the linearization), on every parameter. The start is far from the
+    """Data from the converged COS (error < 1e-12). At the true parameters each residual
+    is then bounded by (err_j + 1e-12) / vega_j, where err_j is the Lewis pricer's error
+    estimate at quote j (test_implied_vol shows it bounds the true error). To first order,
+    |x_hat - x_true|_2 <= (|dr|_2 + |r_final|_2) / sigma_min(J). Tolerance: twice that
+    (factor 2 for the linearization), on every parameter. The start is far from the
     truth. STRESS violates Feller (ratio 0.09); the calibration must report it, not impose it."""
-    s = _surface(d)
+    s = _surface(d, tight=True)
     res = calibrate(s, x0=(0.06, 1.0, 0.06, 0.5, -0.4))
     vega = s.vegas()
-    dr = np.sqrt(np.sum((3e-9 / vega) ** 2))
+    p_true = HestonParams(**d)
+    err = np.array([heston_call(STRIKES, T, p_true, return_error=True)[1] for T in MATS])
+    dr = np.sqrt(np.sum(((err + 1e-12) / vega) ** 2))
     sig_min = np.linalg.svd(res.jac, compute_uv=False).min()
     tol = 2 * (dr + np.linalg.norm(res.residuals)) / sig_min
     err = np.abs(res.x - _truth(d))
@@ -53,10 +61,10 @@ def test_noise_free_recovery(d):
     assert tol < 1e-6  # the bound must be informative
     assert res.success and res.at_bound == ()
     assert res.feller_ratio == pytest.approx(2 * d["kappa"] * d["theta"] / d["xi"] ** 2, rel=1e-6)
-    # Reported IV errors come from exact inversion; they must equal the vega-weighted
-    # residuals up to the inversion accuracy (64 eps S0 / vega + 1e-13, test_implied_vol);
-    # the second-order Taylor term is O(r^2) ~ 1e-20 here.
-    inv_tol = 64 * np.finfo(float).eps * s.S0 / vega.ravel() + 1e-13
+    # Reported IV errors come from two exact inversions (model and market); they must equal
+    # the vega-weighted residuals up to twice the inversion accuracy (64 eps S0 / vega + 1e-13
+    # each, test_implied_vol); the second-order Taylor term is O(r^2) ~ 1e-20 here.
+    inv_tol = 2 * (64 * np.finfo(float).eps * s.S0 / vega.ravel() + 1e-13)
     assert np.all(np.abs(res.iv_errors.ravel() - res.residuals) < inv_tol)
 
 

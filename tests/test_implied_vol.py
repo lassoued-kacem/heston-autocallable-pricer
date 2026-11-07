@@ -81,17 +81,23 @@ def test_prices_within_error_of_a_bound_are_unresolvable():
 @pytest.mark.parametrize("d", [REF, STRESS], ids=["ref", "stress"])
 @pytest.mark.parametrize("T", [0.05, 1.0, 10.0])
 def test_quadrature_error_bound_covers_true_error(d, T):
-    """|Lewis - COS| <= reported bound + COS accuracy. The COS oracle is converged to
-    1e-11 * max(1, max K) under (N, L) doubling, so that is its allowance."""
+    """|Lewis - COS| <= reported error estimate + 1e-12, against a tightly converged COS put.
+    That COS (N = 2^17, L = 192) is first checked to change by < 1e-12 when compared with
+    (2^16, 96), so its own error is negligible and the estimate is the binding term (it is
+    about 5e-10 to 1.4e-9 here; the true error is up to a few percent of it). The estimate
+    must also be informative: < 1e-8."""
     p = HestonParams(**d)
     K = np.array([60.0, 80.0, 100.0, 120.0, 150.0])
-    for pricer, oracle in ((heston_call, R.cos_call), (heston_put, R.cos_put)):
+    cos = lambda N, L: R.cos_put(d["S0"], K, T, *model_args(d), N=N, L=L, adaptive=False)
+    put_ref = cos(2**17, 192.0)
+    assert np.max(np.abs(put_ref - cos(2**16, 96.0))) < 1e-12
+    call_ref = put_ref + d["S0"] * np.exp(-d["q"] * T) - K * np.exp(-d["r"] * T)
+    for pricer, ref in ((heston_call, call_ref), (heston_put, put_ref)):
         price, err = pricer(K, T, p, return_error=True)
-        cos = oracle(d["S0"], K, T, *model_args(d))
-        assert np.all(np.abs(price - cos) <= err + 1e-11 * K.max()), (pricer.__name__, price - cos, err)
-    # and the scalar path reports a bound too
-    c1, e1 = heston_call(100.0, T, p, return_error=True)
-    assert abs(c1 - R.cos_call(d["S0"], 100.0, T, *model_args(d))[0]) <= e1 + 1e-9
+        assert np.all(np.abs(price - ref) <= err + 1e-12), (pricer.__name__, price - ref, err)
+        assert np.all(err < 1e-8)
+    c1, e1 = heston_call(100.0, T, p, return_error=True)  # the scalar path
+    assert abs(c1 - call_ref[2]) <= e1 + 1e-12 and e1 < 1e-8
 
 
 def test_short_maturity_deep_otm_heston_ivs():
