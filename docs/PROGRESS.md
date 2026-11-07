@@ -356,6 +356,55 @@ the Stop hook. It was run with `--strict-figures` before merging and passed.
 
 Final re-review: 0 unresolved.
 
+## Stage 7: Streamlit dashboard (merged, tagged v1.0.0)
+
+### What was built
+- `app/dashboard.py` (`.venv/bin/streamlit run app/dashboard.py`):
+  - Sidebar: the model, spot and fixing, the product (maturity, observation frequency,
+    barrier, KI, coupon) and the MC settings.
+  - Tabs: the price with its SE, 95% interval and call probabilities; CRN Greeks on
+    demand, with units and per-vol-point and per-bp values; and the Heston smile, with
+    unresolvable quotes left blank.
+  - The Feller ratio is shown.
+  - The computations are pure functions with bounded caches.
+  - If the default bumps cannot be applied, the Greeks tab says why.
+- pyproject is at version 1.0.0, with the dashboard test dependencies declared and altair
+  pinned.
+
+### Tests
+106 passing in total (6 in `test_dashboard.py`); full suite about 74 s. Streamlit was also
+launched as a server (`--server.headless true`), and `/_stcore/health` returned "ok".
+
+### Tolerances and why
+| Check | Tolerance | Justification |
+|---|---|---|
+| Wiring in the BS limit (spot 97, fixing 100, semi-annual, B 95%, KI 65%): price and each call probability vs the MVN oracle | 4 SE | Log-Euler is exact at the dates. A barrier/KI swap or a fixing that follows spot moves the price by 181 and 47 SE (measured in review). |
+| Smile in the BS limit | 1e-5 / vega | Stage 1 price-gap bound. |
+| Headless app's price vs a direct call with the defaults as fractions | exact string to 4 decimals | Same seed, same numbers. A dropped /100 on the coupon fails it. |
+
+A mutation check was run. These planted bugs were caught by the wiring tests:
+- barrier set to KI;
+- KI set to the barrier;
+- the fixing ignored;
+- the coupon scaled by /10.
+
+### Reviewer findings and resolutions
+1. **Minor:** the Greeks button crashed when spot was within the 2% bump of zero. Fixed:
+   a feasibility check plus a warning, an error backstop, and a regression test.
+2. **Minor:** the Greeks had no units, and vega per 1.00 of vol could be misread by 100x.
+   Fixed: a units column, plus per-vol-point and per-bp values.
+3. **Minor:** the wiring test's docstring claimed probability and percent-scaling checks it
+   did not make. Fixed: both are now asserted.
+4. **Nits:**
+   - the SE is visible under the price;
+   - the caches are bounded;
+   - the fixing default comes from the defaults table;
+   - the README status line is fixed;
+   - the packaging metadata is updated;
+   - the bump defaults come from `autocallable_greeks`.
+
+Final re-review: 0 unresolved.
+
 ## Deferred to later stages
 - **Stage 4 (resolved in stage 4):** the quad error estimates are currently discarded
   (`integral, _ = quad(...)` in `analytic.py`), and Heston prices can be slightly
